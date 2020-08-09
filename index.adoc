@@ -1,0 +1,1633 @@
+= Onyx Programming Language Quick Reference
+:stem:
+:toc: left
+:toclevels: 3
+:sectnums:
+:sectlinks:
+
+== Document
+
+It contains explainations and rationale, which are rare in the Standard.
+
+== Philosophy
+
+Target agnosticism.
+No assumptions are made about target in the language.
+All that's known is that there is processing unit, registers and instructions.
+
+Onyx defines concept of function, abstract data structures (Array, Tuple, namespaces, trait, union, struct, class, enum, Variant, Union, Lambda, Function, Type, Block, Literal, Reference, Pointer), storages (local, caller, instance, static, undefined), lifetime, common math types.
+
+TODO: Only functions may be exported.
+Structs, enums, typedefs are externed instead.
+
+A target may be binary, decimal or even quantum; to contain ALU and FPU or not.
+It is possible to query if target implements any type natively.
+A entity is a blackbox until observed.
+Interchange formats are defined: `SBin8` is not necessarily stored in 8 bits, but `.bits` method returns `Bit[8]`, formatted in special way.
+
+`Pointer` is just a pointer to data.
+It may be a pointer to memory, or register.
+Size of a `Pointer` is undefined.
+But `Pointer` has `to($int*)` methods defined, which allocate memory on stack.
+
+== Design goals
+
+Stay low-level, but give tools for powerful abstractions.
+For example, C pointer is target-dependent; what we known of Onyx pointer is storage.
+We call `ptr.to($int*)`, and target may allocate it on stack.
+
+== Notation
+
+Keywords are written like this: `stem:[bb"let"]`.
+Example identifiers are written like this: `stem:["foo"]`.
+For example, `stem:[bb"let"] stem:["foo"] = stem:["bar"]()`.
+
+== Comments
+
+A comment begins with `#` and spans until the end of the line.
+
+A comment adjacent to a member declaration or implementation statement is called _documentation_.
+
+The Standard contains an informative appendix for comment styling.
+
+An implementation is required to provide a command to generate API documentation data, e.g. `nxc api -fjson -o main.json main.nx`.
+Only documentation comments are included in the generated API data.
+The API data format is a normative part of the Standard, and provides specifications for C header (see xref:_interoperability[]), JSON, YAML, XML, MessagePack and NXAPI binary transfer formats.
+
+=== Comment intrinsics
+
+The Standard contains an informative list of _comment intrinsics_ for special treatment.
+
+A comment intrinsic syntax is `:stem:["intrinsic"](stem:["args"]):`, whereas the argument part may be omitted if having zero arity.
+
+A comment intrinsic does not expand during API data generation, e.g. `:ditto:` is preserved as-is.
+It is an API data consumer (expected) responsibility to consume and handle intrinsics properly.
+A non-standardized intrinsic is thus not a error, e.g. `:unknown:` is legal during API data generation.
+A misused intrinsic, e.g. a missing `:fmt:` pattern reference is also not a error during API data generation.
+
+[TIP]
+--
+The intrinsics ignorance behaviour is dictated by the fact that comments are not a part of the resulting program.
+--
+
+Below goes the list of standardized comment intrinsics.
+
+==== `:ditto:`
+
+A `:ditto:` comment intrinsic copies documentation from the previous member in current file.
+
+====
+```nx
+# This is doc.
+let x = 42
+
+# This is a comment.
+#
+
+# :ditto:
+let y = 42
+```
+
+Results in:
+
+```nx
+# This is doc.
+let x = 42
+
+# This is doc.
+let y = 42
+```
+====
+
+==== `:super:`
+
+A `:super:` comment intrinsic copies comment from the super declaration, applicable to overwrites, inherited functions etc.
+
+Without `:super:`, a documentation comment fully replaces previous documentation.
+
+====
+```nx
+struct Foo
+  # A doc.
+  def a;
+
+  # B doc.
+  def b;
+end
+
+struct Bar
+  extend Foo
+    # C doc.
+    reimpl a;
+
+    # :super:
+    # D doc.
+    reimpl b;
+  end
+end
+```
+
+Results in:
+
+```nx
+struct Bar
+  # C doc.
+  def a;
+
+  # B doc.
+  # D doc.
+  def b;
+end
+```
+====
+
+==== `:nodoc:`
+
+A `:nodoc:` comment intrinsic disables documentation for the currently documented member until a matching `:doc:` intrinsic is met.
+
+====
+```nx
+# :nodoc:
+# Is useless in non-doc comments.
+#
+
+# This is doc.
+# :nodoc: This would not be included.
+# :doc: And this would.
+# :nodoc: This would not again.
+let x = 42
+
+# Note that previous nodoc does not matter here.
+let y = 42
+```
+
+Results in:
+
+```nx
+# This is doc.
+# And this would.
+let x = 42
+
+# Note that previous nodoc does not matter here.
+let y = 42
+```
+====
+
+==== `:patt:`
+
+`:patt(stem:["name"], stem:["args"]):`, `:endpatt(stem:["name"]):` and `:fmt(stem:["name"], stem:["args"]):` comment intrinsics are used for comment patterns.
+
+Within a pattern, the `%{stem:["var"]}` syntax is used to insert a variable.
+
+For stem:["name"] and stem:["args"], double or single quotes are optional, but required if the text contains possibly misinterpred symbols, i.e. `)`, `:`, `,`.
+
+Patterns are local to the file.
+
+====
+```nx
+# :patt("trg-dep", entity, default):
+# %{entity} is target-dependent, defaults to %{default}.
+# :endpatt:
+
+# :fmt("trg-dep", 'Alignment', 8):
+let x = 42
+```
+
+Results in:
+
+```nx
+# Alignment is target-dependent, defaults to 8.
+let x = 42
+```
+====
+
+== Entities
+
+In Onyx, a entity may be declared and possibly implemented.
+
+During the compilation process, the program AST is continuosuly being appended to, in real time.
+Therefore, the order of declaration matters.
+Unlike in other languages, referencing an undeclared yet entity triggers panic.
+
+====
+This code panics, because `y` is not declared prior to usage:
+
+```nx
+# let x = y + 1 # Panic!
+let y = 42
+```
+
+Note that the following code leads to undefined behavior, because the `x` expression is evaluated immediately:
+
+```nx
+let y = unsafe! uninitialized SInt32
+let x = y + 1 # Undefined behaviour
+y = 42
+```
+====
+
+=== `decl`
+
+A declaration statement (`decl`) of a entity tells or reminds a compiler that such a entity exists.
+
+Namespace, annotation, trait and unit types are implicitly declared; for example, `namespace Foo` is equivalent to `decl namespace Foo`.
+
+=== `impl`
+
+An implementation statement (`impl`) implements a previously declared entity.
+
+Only a data type, function or macro entity may be implemented.
+
+=== `def`
+
+A definition (`def`) is a declaration and implementation of a entity in the same statement.
+
+Struct, class and enum types, as well as values, functions and macros are implicitly defined; for example, `struct Foo` is equivalent to `def struct Foo`.
+However, even such a entity may be explicitly declared prior to implementation, for example:
+
+====
+```nx
+decl struct Foo;
+
+# Either is valid.
+#
+
+impl struct Foo;
+def struct Foo;
+struct Foo; # `def` is implied
+```
+====
+
+// A type may be reopened using a `reopen` statement.
+// See xref:_reopening[].
+// Only a specific specialization of a type declaration may be reopened, i.e. generic arguments (if any) shall be passed to it.
+
+=== `moveimpl`
+
+A entity implementation may be moved under another name using a `moveimpl` statement.
+For example, `moveimpl foo as bar` statement moves implementation from `foo` to `bar`, effectively un-declaring `foo`.
+
+However, only the specified declaration is moved.
+For example:
+
+====
+```nx
+def foo(arg ~ Real) { x }
+moveimpl foo(arg ~ SInt) to bar
+```
+
+Leads to:
+
+```nx
+def foo(arg ~ Real && !SInt) { x }
+def bar(arg ~ SInt) { x }
+```
+====
+
+=== `reimpl`
+
+A entity implementation may be re-implemented using a `reimpl` statement.
+For example, `def foo { return 1 }; reimpl foo { return 2 }` results in `def foo { return 2 }`.
+
+Akin to xref:_moveimpl[], only the specified declaration is re-implemented.
+
+Having a `as` clause acts as xref:_moveimpl[], for example:
+
+====
+```nx
+def foo(arg ~ Real) { return 1 }
+reimpl foo(arg ~ SInt) as bar { return 2 }
+```
+
+Results in:
+
+```nx
+def foo(arg ~ Real && !SInt) { return 1 }
+def bar(arg ~ SInt) { return 2 }
+```
+====
+
+=== `undecl`
+
+A declaration may be un-declared using an `undecl` statement, e.g `undecl foo`.
+From that point, a compiler no more aware of the declaration until the entity is declared again.
+
+=== `alias`
+
+An `alias` statement declares an alias to a entity.
+
+```ebnf
+alias =
+  "alias",
+  ref, {",", ref},
+  ("=" | "to"),
+  ref;
+```
+
+Forwarded and recursive aliases are allowed while resolve-able.
+
+An `alias` statement conveys arguments to the target entity.
+An omitted arguments list implies conveying all of the arguments.
+A `++*++` in the arguments list captures all the arguments left and passes them to the target entity, e.g. `alias SInt32Pointer<++*++> = Pointer<SInt32, ++*++>`.
+
+A single `alias` statement may contain multiple aliases to the target entity, separated by commas.
+
+====
+```nx
+primitive Int<Bitsize ~ \%nat, Signed ~ \%bool>
+  def subtract(another : self) : self;
+  alias sub, - to subtract
+end
+
+alias SInt<Bitsize: Z> = Int<Z, true>
+alias UInt<Bitsize: Z> = Int<Signed: false, Bitsize: Z>
+
+alias UInt1 = UInt\<1>
+alias Bit, Bool = UInt1 # Multiple forwarded aliases
+```
+====
+
+=== Visibility modifiers
+
+A `decl`, hence also `def`, statement may have a _visibility modifer_, which affects the visibility of the declared entity.
+
+A entity declared `public` is visible outside of the current scope.
+A entity declared `protected` is only visible in the same or child scope.
+A entity declared `private` is only visible in the current scope.
+
+A top-level entity can not be declared `protected`.
+A top-level entity declared `private` is only visible in the current file.
+
+== Directives
+
+A _directive_ is an instruction to the compiler.
+
+File dependency directives instruct the compiler to depend on certain files.
+
+=== `require`
+
+Files can be required using a `require` directive.
+
+The same file may be required multiple times.
+It is guaranteed to be only processed once required for the first time.
+
+If a required file is missing extension, `.nx` would be appended.
+
+A `require` directive may list multiple files to require, and an optional path to prepend to each required file path.
+For example, `require "foo", "bar/baz.nx" from "/myloc"` is equivalent to `require "/myloc/foo.nx", "/myloc/bar/baz.nx"`.
+
+A non-relative file path is first looked up relatively to the folder the file is contained in, i.e. `./`.
+
+A compiler is required to provide a way to pass folder paths to lookup required files in, e.g. `-R/usr/nx`.
+These paths would be prepended if a `require` statement is missing `from` clause.
+For example, given `-R/usr/nx` flag, a `require "foo"` statement would lookup the file in the following order:
+
+. `./foo`
+. `./foo.nx`
+. `/usr/nx/foo`
+. `/usr/nx/foo.nx`
+
+TIP: The `-R` feature comes in handy when need to flip the dependencies source folder, for example to match the target.
+
+Wildcard requirements are possible, as defined by the POSIX standards, e.g. `require "./++*++"` or `require "./++**++"`.
+The order of wildcard lookups is standardized.
+
+A translation environment maintains the being-compiled program AST, and the order of requiring files matters.
+If a required file references an undeclared yet entity, a compiler panics.
+
+=== `import`
+
+An `import` directive imports C header files.
+
+Rules similar to `require` are applied to an `import` directive.
+The default imported file extension is `.h`.
+A compiler is required to provide a way to pass import lookup paths, e.g. `-I/usr/include`.
+
+More information on handling imported entities is found at xref:_interoperability[].
+
+=== `using`
+
+A `using` directive allows to either include a namespace or apply a refinement in the current scope, limited to the file.
+
+If `namespace` and `refinement` keywords are omitted, the exact kind of a `using` directive operand is inferred from the type being used.
+Otherwise, the type is forced.
+
+====
+```nx
+namespace Foo
+  let bar = 42
+end
+
+# bar = 43 # Panic! `bar` is not defined
+
+using Foo
+# using namespace Foo # To be more explicit
+
+bar = 43 # OK
+```
+====
+
+== Literals
+
+Literal instances.
+
+|===
+| Expression | Meaning | Examples
+
+| `\%real`
+| Real number
+| `-1`, `-0.5`, `-1/2`, `0`, `0.5`, `1/2`, `1`
+
+| `\%int`
+| Integer number
+| `-1`, `0`, `1`
+
+| `\%nat`
+| Natural number
+| `0`, `1`
+
+| `\%bool`
+| Boolean
+| `false`, `true`
+
+| `\(%nat, %nat)`
+| Tuple of literals
+| `(1, 2)`
+
+| `\(foo: %nat)`
+| Named tuple of literals
+| `(foo: 1)`
+
+| `\..%nat`
+| Range literal
+| `1..2`, `0\...`, `%r[0 max)`
+|===
+
+.Literal instance
+====
+```nx
+let t : \%nat = 2 # A literal instance
+
+def times(t ~ %nat)
+  \{% for i = 1, nx.scope.t.value do %}
+    Std.puts("Hi\0")
+  \{% end %}
+end
+
+times(t) # Would output `Hi` two times
+```
+====
+
+=== Range literals
+
+[cols="2*m, 1, 1m", options="header"]
+|===
+| Literal
+| Magic literal
+| Math equivalent
+| Type
+
+| stem:[A]..stem:[B]
+| %r[stem:[A] stem:[B]]
+| stem:[[A, B\]]
+| Range<stem:["T"], true, true>
+
+| stem:[A]\...stem:[B]
+| %r[stem:[A] stem:[B])
+| stem:[[A, B)]
+| Range<stem:["T"], true, false>
+
+d| N/A
+| %r(stem:[A] stem:[B]]
+| stem:[(A, B\]]
+| Range<stem:["T"], false, true>
+
+| stem:[A]\....stem:[B]
+| %r(stem:[A] stem:[B])
+| stem:[(A, B)]
+| Range<stem:["T"], false, false>
+|===
+
+If omitted, `stem:[A]` defaults to `:min`, and `stem:[B]` defaults to `:max`.
+For example, `0.. == 0..:max`, `.. == :min..:max`.
+A magic literal requires both ends to be set explicitly (still allowing symbols, e.g. `%ri[min stem:[B])`).
+
+== Values
+
+A _value_ is an instance of a _data type_.
+For example, `42` may be a value of data type `SBin32`.
+
+A runtime entity is either a value (`val : stem:[T]`), a _reference_ to a value (`ref : Reference<stem:[T]> : stem:[T]&`), or a _pointer_ to a value (`ptr : Pointer<stem:[T]> : stem:[T]*`).
+The latter two are known as xref:_indirect_values[].
+
+A reference has the same internal representation as a pointer, but the referenced value access semantic is different.
+
+A reference is an _lvalue_, these terms are interchangeable.
+A value or a pointer to a value is an _rvalue_.
+
+=== Assigning values
+
+Assigning an rvalue to an lvalue simply _moves_ the value into the lvalue, making the lvalue a sole owner of the value.
+
+Assigning an lvalue to another lvalue of the same type calls a copy initializer on the right operand, and moves the rvalue result to the left operand.
+In [line-through]#other words# symbols, `stem:[l]~0~ : stem:[T]& = stem:[l]~1~ : stem:[T]&` stem:[=>] `stem:[l]~0~ = stem:[T](&stem:[l]~1~) : stem:[T]`.
+
+// An lvalue itself (i.e. not the referenced value, but reference itself) may be assigned to another lvalue using the direct assignment operator `:=`.
+// The direct assignment operator is applied directly to the left operand, instead of proxying the assignment to the referenced value.
+
+====
+```nx
+let x ~ SBin32& = 42
+let y ~ SBin32& = x # Calls a copy initializer: `SBin32(&x)`
+y = 43
+@assert(x == 42) # Did not change `x`
+```
+====
+
+When passing an argument to a function `decl foo(arg : T&)`, the `foo(arg: x)` call syntax (or simply `foo(x)`) is a syntactic sugar for `foo(arg: = x)`, where `arg:` references the callee's argument lvalue.
+// Therefore, to directly assign to a callee's argument, use the `foo(arg: := x)` syntax.
+Similar is applicable to the aforementioned xref:_moving_values[moving] semantics, i.e. `foo(arg: ++<-++x)`.
+However, a function argument does not have a value yet (even default), thus this is applicable neither to pushing nor to swapping.
+
+[NOTE]
+--
+It is not applicable to pushing (e.g. `foo(arg: ++<<=++ x)`), because the argument default value is set if the argument is empty *after* the pass, and there is no syntax defined to receive the pushed value.
+
+Should think about default value semantics: may be the default value is set prior to passing?
+If so, both pushing and swapping may be possible.
+--
+
+=== Moving values
+
+A reference may be turned into an rvalue using the `++<-++` unary operator.
+After that, the reference is considered _moved_.
+The resulting rvalue may be assigned to an lvalue; effectively, it moves a value from one lvalue to another, skipping a copy initializer call.
+
+A moved lvalue itself shall not be used anymore, unless set again.
+Therefore, [underline]#only an explicitly declared# (e.g. with `stem:["let"]`) [underline]#local-scoped reference may be safely moved#.
+Otherwise, moving is unsafe.
+When moving safely, a compiler would panic if there is at least a possibility of using a moved lvalue, for example, when moving depends on runtime.
+
+A `stem:[l]~0~ ++<-++ stem:[l]~1~` expression is a syntactic sugar for `stem:[l]~0~ = ++<-++ stem:[l]~1~`.
+Without any receiver, a `++<-++stem:[l]` expression effectively finalizes the referenced value.
+
+.Moving an lvalue
+====
+```nx
+let x = 42
+let y <- x # Moves `x` into `y`
+# x # Panic! Use after move (UAM)
+y = 43 # Changes `y`
+unsafe! x = 44 # Undefined behaviour, but does not affect `y`
+x = 45 # Set `x` again
+
+@assert(x == 45)
+@assert(y == 43)
+```
+
+```nx
+def foo(list : Std::List&);
+let list = Std::List()
+
+foo(list) # Copy the list
+# foo(list: list) # Ditto
+
+foo(<-list) # Move the list instead of copying it
+# foo(list: <-list) # Ditto
+# list # Panic! UAM
+```
+====
+
+Returning an lvalue implicitly moves it, i.e. `return stem:[l]` is equal to `return ++<-++stem:[l]`.
+Therefore, it is not possible to return an lvalue, hence reference.
+
+An rvalue may also be moved, i.e. `++<-++stem:[r]` is not a error.
+
+=== Pushing values
+
+Assigning or moving into an lvalue returns the left operand, i.e. the affected reference, finalizing the old value.
+It is possible to do a _push-assign_ (`++<<=++`) or _push-move_ (`++<<-++`) instead, which return the old value as an rvalue.
+
+.Pushing into lvalues
+====
+```nx
+let x = 42
+@assert((x = 43) == 43)   # Replaces the old value
+@assert((x <<= 44) == 43) # Pushes the old value
+
+let y = 17
+@assert((y <<- x) == 17)
+```
+====
+
+=== Swapping values
+
+Two indirect values referencing values of the same type may swap their values using the _swap operator_ `++<->++`.
+The operation shall be allowed by the scope constraints (for example, it is not possible to swap indirect values with undefined scopes), and is fragile.
+The left operand is then returned.
+
+.Swapping lvalues
+====
+```nx
+let x = 42
+let y = 43
+@assert((x <-> y) ~ SBin32& == 43) # New `x` value is 43
+```
+====
+
+== Indirect values
+
+An indirect value is either a xref:_references[reference] or xref:_pointers[pointer] to a xref:_values[value].
+Indirect values share common semantics, such as xref:_scopes[scope], xref:_spaces[space], readability and writeability (commonly known as xref:_accessibility[]).
+
+=== References
+
+A reference type `Reference<Type: stem:[T], Scope: stem:[S], Space: stem:[P], Readable: stem:[R], Writeable: stem:[W]>` can be shorcut as `stem:[T]&stem:[SPRW]`, e.g. `SBin32&lrw0 == Reference<SBin32, :local, 0, true, true>`.
+For scope one-letter shortcuts, see xref:_scopes[].
+
+A _variable_ reference is declared using the `stem:[bb "let"] stem:["var"]` syntax.
+A variable reference is always both writeable and readable, i.e. `let var : stem:[T]&rw`.
+A variable may be also declared write-only, e.g. `let buff : SBin32&sw`.
+Within a class declaration, special `stem:[bb "get"]` and `stem:[bb "set"]` declarations may be used, which does not affect the "real" reference accessibility.
+
+A _constant_ reference is declared using the `stem:[bb "final"] stem:["const"]` syntax.
+A constant reference is read-only by default, i.e. `final const : stem:["T"]&r`.
+However, a constant reference may be declared xref:inaccessible[inaccessible] by restricting it to a `stem:["T"]& : stem:["T"]&stem:["RW"]` type, e.g. `final dead : SBin32&s`.
+
+A reference declaration type annotation is optional and (usually) may be inferred.
+
+A reference declaration may have one of `stem:["local"]`, `stem:["instance"]` or `stem:["static"]` scope modifiers, e.g. `let local var`.
+Implicit default scope modifiers are defined for certain scopes, read more in xref:_scopes[].
+
+Accessing a reference transparently accesses the referenced value.
+For example, `(stem:[l] : stem:[T]&).stem:[m]` accesses `stem:[m]` member of the value referenced by `stem:[l]`.
+The same applies to lookup, i.e. `stem:[T]&::stem:[m]` transparently lookups `stem:[T]::stem:[m]`.
+This paragraph is important, because it means that a reference itself can not be accessed, but only the value it references.
+
+A value type itself shall not be a reference, i.e. `stem:[r] : stem:[T]&` is illegal, which also makes references to references and pointers to references illegal.
+
+TIP: This behaviour is different from C++, where references are first-class types and may be (almost) freely passed around.
+
+=== Pointers
+
+Similar to references, the shorcut semantic is applicable to a `Pointer` type, but with the `*` symbol, e.g. `SBin32*lrw0 == Pointer<SBin32, :local, 0, true, true>`.
+
+Akin to C, pointer to pointer, i.e. `stem:["T"]**`, is legal, with arbitrary depth.
+
+Akin to C, a reference may be safely cast to a pointer using the `&(stem:["l"] : stem:["T"]&) : stem:["T"]\*` semantic, and vice versa.
+For example, `let x : SBin32&lrw = 42` and then `&x : SBin32*lrw`, and then `*&x : SBin32*lrw` again.
+
+In fact, a reference is similar to pointer, but implies different underlying value access semantics, and can not be referenced to.
+
+As in C, a pointee is accessed using the `++->++` operator, e.g. `ptr++->++foo`.
+However, in Onyx, the `++->++` operator by itself turns a pointer into reference, i.e. `((stem:["ptr"] : stem:["T"]*)++->++) : stem:["T"]&`.
+
+=== Accessibility
+
+An object is _accessed_ in runtime using the `.` notation, which transparantly passes the callee's pointer as the first argument to the caller in accordance to the https://en.wikipedia.org/wiki/Uniform_Function_Call_Syntax[UFCS], e.g. `obj.foo()` equals to `obj::foo(&obj)`.
+
+[[inaccessible]]
+Indirect value readability and writeability are commonly referenced as _accessibility_.
+Thus, a neither readable nor writeable indirect value is _inaccessible_.
+
+Reading means either moving an lvalue or assigning it, i.e. read the underlying value.
+Note that passing an indirect value around is not considered reading.
+
+Writing means writing directly into the underlying value space, e.g. assigning to an indirect value.
+Note that mutating an underlying value of a class type is not considered writing, i.e. `final list : mut Std::List<SBin32>()`, and then `list << 42` is legit; but "mutating" any other type is considered writing.
+That's one of the outstanding features of a class type.
+
+// It is not possible to read value referenced by a non-readable indirect value, ditto for writeability.
+
+Positive readability is designated with lowercase `r` symbol in the indirect value shortcut semantic; for example, `stem:[T]&r` is a readable reference.
+Writeability uses the letter `w`.
+Negative stem:[x]-ability is designated with an uppercase letter, e.g. `stem:[T]&RW` is inaccessible.
+
+A stem:[x] indirect value may be safely conveyed into an outer scope as a non-stem:[x] indirect value.
+For example, a `stem:[T]*rw` may be safely auto-cast to a `stem:[T]*Rw` argument, but vice versa would be unsafe.
+
+=== Spaces
+
+An indirect value space is a platform-defined natural value, declared as a `Space : ~\%nat = 0` argument.
+Note that omitting the `Space` argument implies the default zero space.
+
+An indirect value with undefined space is incomplete.
+Indirect values with different spaces are incompatible.
+
+In an indirect value shortcut notation, space is a natural number, usually put in the very end, e.g. `T&lrw0`.
+
+The Standard defines space mappings for common platforms.
+
+== Scopes
+
+Defined scopes are stem:[bb"t"]_emporal_, stem:[bb"l"]_ocal_, stem:[bb"c"]_aller_, stem:[bb"i"]_nstance_ and stem:[bb"s"]_tatic_.
+An indirect value may also have an stem:[bb"u"]ndefined scope.
+
+When passing an aggregate (i.e. non-scalar) value to an outer scope (i.e. returning or passing as an argument), each of its fields' scopes is checked and auto-cast separately.
+For example, returning an `Array<stem:[T]*l, stem:[N]>` would check each of its elements as it was an independent value; returning `stem:[T]*l` is not possible, thus the compiler would panic.
+On the other side, passing an `Array<stem:[T]*l>` as a `Array<stem:[T]*c>` is possible.
+
+Similar rules are applied to a value existence.
+`stem:[T]*l&s` does not make sense, as there is no local scope in the static scope.
+That said, `Array<stem:[T]*l>&l` and `Array<stem:[T]*s>&l` are valid, but `Array<stem:[T]*l>&s` is not.
+
+Note that a non-indirect value does not have scope, it is pure data, which can be passed at any direction.
+
+A field of a pointer type with scope other than static or undefined shall not be declared.
+However, a generic-typed field may be specialized with another scope.
+For example:
+
+====
+```nx
+struct Foo
+  # # Does not make sense to
+  # # have local pointer here
+  # let ptr : SBin32*l&i
+end
+```
+
+```nx
+struct Foo<T>
+  let ptr : T # OK
+end
+
+final global_x = 42
+# TODO: Address space inference here?
+# Would likely put into `.global` on PTX.
+final global_foo = Foo<SBin32*srw>(&x) # OK
+
+def bar
+  final x = 42
+  final foo = Foo<SBin32*lrw>(&x) # OK
+
+  # # As mentioned above, each field is checked independently;
+  # # it is not possible to pass a local pointer outside, thus panicking.
+  # return foo # Panic!
+end
+```
+====
+
+=== Scope casting
+
+An indirect value of one scope may be cast to another scope using the `as` operator in accordance to xref:scope-casting-table[].
+
+[[scope-casting-table]]
+.Scope casting
+[cols=7]
+|===
+.2+^.^s| Source scope
+6+^.^s| Safety of casting to target scope
+
+| Temporal | Local | Caller | Instance | Static | Undefined
+
+| Temporal
+| [green]#Threadsafe#
+4*| [red]#Unsafe#
+| [green]#Threadsafe#
+
+| Local
+| [green]#Threadsafe#
+| [green]#Threadsafe#
+3*| [red]#Unsafe#
+| [green]#Threadsafe#
+
+| Caller
+3*| [green]#Threadsafe#
+| [red]#Unsafe#
+| [red]#Unsafe#
+| [green]#Threadsafe#
+
+| Instance
+| [green]#Threadsafe#
+| [green]#Threadsafe#
+| [red]#Unsafe#
+| [green]#Threadsafe#
+| [red]#Unsafe#
+| [green]#Threadsafe#
+
+| Static
+6*| [green]#Threadsafe#
+
+| Undefined
+5*| [red]#Unsafe#
+| [green]#Threadsafe#
+|===
+
+=== Argument autocasting
+
+Only a pointer with caller, static or undefined scope may be declared as a function argument type.
+
+When a pointer is passed to a function, it may be automatically cast to the target argument scope with safety defined in xref:argument-pointer-scope-auocasting[].
+Otherwise, manual xref:_scope_casting[] is required.
+
+The resulting safety of a call is the lowest safety from the callee safety modifier (e.g. `unsafe def foo();`) and the autocasting safety of its arguments from the following table.
+
+[[argument-pointer-scope-auocasting]]
+.Argument pointer scope autocasting
+[cols=4]
+|===
+.2+^.^s| Caller-side pointer scope
+3+^.^s| Autocasting safety by a declared argument's scope
+| Caller
+| Static
+| Undefined
+
+| Temporal
+| [gray]#N/A#
+| [gray]#N/A#
+| [green]#Threadsafe#
+
+| Local
+| [green]#Threadsafe#
+| [gray]#N/A#
+| [green]#Threadsafe#
+
+| Caller
+| [green]#Threadsafe#
+| [gray]#N/A#
+| [green]#Threadsafe#
+
+| Instance
+| Varies (see xref:_instance_scope[])
+| [gray]#N/A#
+| [green]#Threadsafe#
+
+| Static
+| [yellow]#Fragile#
+| [green]#Threadsafe#
+| [green]#Threadsafe#
+
+| Undefined
+| [red]#Unsafe#
+| [gray]#N/A#
+| [green]#Threadsafe#
+|===
+
+=== Returned scope autocasting
+
+A pointer with local scope shall not be safely returned from a function.
+Other returned scopes are treated on the caller side in accordance to the following table.
+
+[[returned-scope-casting]]
+.Returned pointer scope autocasting
+[cols=2]
+|===
+^.^s| Scope returned from callee
+^.^s| Caller-side resulting scope
+
+| Temporal
+| Temporal
+
+| Local
+| [gray]#N/A#
+
+| Caller
+| Local (see xref:_caller_scope[])
+
+| Instance
+| Varies (see xref:_instance_scope[])
+
+| Static
+| Static
+
+| Undefined
+| Undefined
+|===
+
+=== Temporal scope
+
+A temporal-scoped indirect value shall not be preserved for future use.
+Therefore, a reference to a temporal-scoped pointer (e.g. `let x : T*t&`) is illegal, which makes it impossible to pass a temporal-scoped indirect value anywhere, but access it immediately or return only.
+
+Any-scoped indirect value other than undefined may be thread-safely cast to a temporal-scoped indirect value, but not vice versa.
+
+TIP: Counter-example for passing a temporal-scoped pointer as an argument: `def foo(list : List<T>*c, element : T*c)`: after resizing of the `list` inside the body, `element` may become invalid.
+Also returning the `element` from the function would cast it to local scope on the caller site, which is inappropriate.
+
+====
+```nx
+class Std::List<T>
+  let pointer : Void*
+
+  mut def [](index : Size) : T*trw
+    # Returning a reference would not make sense here,
+    # because returning implies moving, and moving
+    # turns the reference into an rvalue.
+    #
+    # Thus, return a temporal pointer to an element.
+    # Temporal it is because the list may be resized at any
+    # moment, and the element pointer would become invalid.
+    return unsafe! pointer[index] as T*trw
+  end
+end
+
+final list = mut Std::List(1, 2, 3)
+let x = 42
+
+# final e : SBin32*trw&lr = list[1] # Panic! Can not have a reference
+                                    # to a temporal pointer
+
+final e : SBin32&lr = *list[1] # OK, copies `2` into `e`
+
+*list[1] = x # OK, copies value from `x` into the element
+```
+====
+
+=== Local scope
+
+References declared within a function body or arguments list with `stem:["local"]` modifier (which is the default one) always have _local scope_.
+Only references with `stem:["local"]` scope modifier may be local-scoped.
+That means that neither `let stem:[x] : stem:[T]&s` nor `static let stem:[x] : stem:[T]&l` are legal.
+
+Once the scope containing an explicitly declared local-scoped reference terminates, the referenced value is finalized, but only once.
+// If a reference is unsafely cast to be local-scoped, the finalizing behaviour is undefined.
+// Only those local references declared explicitly in a scope with `stem:["let"]` or `stem:["final"]` keywords, or function arguments, are finalized.
+
+It is not possible to safely pass a local-scoped pointer to an outer scope.
+But, a local-scoped pointer may be safely passed as a caller-scoped pointer argument.
+Note that it does not make sense do declare a local-scoped pointer argument, i.e. `stem:[a] : stem:[T]*lr&`, because where would it point to?
+
+====
+```nx
+# def foo(final local arg : SBin32&lrW0) # Ditto
+def foo(arg : SBin32&)
+  arg : SBin32&lr0  # Inferred to be local
+
+  # final x : SBin32&s # Panic! A reference declared with `local` scope
+                       # modifier may only have local `Scope` argument
+
+  final x = 42
+  x : SBin32&lr0 # Inferred to be local
+
+  bar(&x : SBin32*lr) # Can pass local-scoped ind-val as caller-scoped
+  @assert(x == 43)
+end
+
+# Note the `&ref` syntactic sugar,
+# which turns a pointer into reference.
+def bar(&ref : SBin32*cw&lr)
+  ref = 43 # Change caller-scoped reference
+end
+```
+====
+
+=== Caller scope
+
+A caller-scoped pointer is known to point at a value existing somewhere in the call stack, and therefore shall not be passed outside of it (the call stack), but can be safely returned.
+
+Returning a caller-scoped pointer always casts it to a local-scoped pointer on the caller side, because there is no way to preserve whether does the pointer point to a value existing in the caller scope or somewhere upper in the call stack.
+
+====
+```nx
+def tap(arg : SBin32*c&) : SBin32*c
+  return arg
+end
+
+def foo(a : SBin32*c&)
+  let b = 42
+
+  let x = tap(a) : SBin32*l # Here, `a` really points to the caller
+                            # scope, but we can't know that
+
+  let y = tap(&b) : SBin32*l
+end
+```
+====
+
+There is no way to declare a caller-scoped reference other than dereference a caller-scoped pointer, which is ephemeral by nature.
+
+// It is not possible to safely coerce a caller-scoped reference as a local-scoped, because it would imply finalization responsibilities at the scope end.
+
+=== Instance scope
+
+TIP: The _field_ term is a shortcut for "a reference declared under an object type declaration with `stem:["instance"]` scope modifier"; ditto for _method_, which is a function declaration.
+
+Instance scope spans to the object's lifetime, thus applicable to field declarations only, and may be also used within methods.
+A reference declared with `stem:["instance"]` scope modifier, which is implicit default for fields, always has instance scope.
+
+NOTE: Within an object declaration, a reference may also be declared with an explicit `stem:["static"]` scope modifier.
+
+When returned from a method, an instance-scoped pointer scope is cast to the object's scope, from the perspective of the caller.
+An instance-scoped pointer shall not be safely cast to any other scope other than undefined, because it would eliminate the "cast to object's scope" feature.
+
+It is possible to safely pass an instance-scoped pointer as a caller-scoped pointer argument.
+
+A field's referenced type shall not be declared an instance-scoped pointer, because we don't know the scope the object would be put in, thus can not reliably determine the pointer size.
+
+====
+```nx
+struct Point
+  let x : FBin64&i # Implicit `instance` scope for a struct's field
+
+  # let ptr : SBin32*i&i # Panic! Can not have instance-scoped
+                         # pointer as a field's type
+
+  def get_x : FBin64*irw
+    x : FBin64&irw # This is an instance-scoped reference
+
+    # Again, returning a reference would turn it
+    # into an rvalue, which is not what we want.
+    return &x : FBin64*irw
+  end
+end
+
+final p = Point(42)
+
+# An instance pointer becomes a local
+# pointer, inherited from `p`'s scope
+final x : FBin64*lrw&lr = p.get_x : FBin64*lrw
+```
+
+TIP: TIP: Only local-scoped *references* are finalized, and `x` is a local-scoped *pointer*.
+Therefore, no double-finalization would happen.
+====
+
+=== Static scope
+
+Statically-scoped indirect values reference values existing in the static scope, i.e. outside of the call stack, and guaranteed to be available at any moment of program execution.
+
+TIP: TODO: The definition of "static" is tricky for GPU kernels.
+Should put better thought at it.
+
+A reference declared in a namespace, trait or unit type declaration has implicit `stem:["static"]` scope modifier.
+A reference declared in a struct, class or enum type declaration may be declared statically-scoped with explicit `stem:["static"]` scope modifier.
+
+A statically-scoped indirect value may be safely cast to a local-, caller-, instance- or undefined-scoped indirect value, but not vice versa.
+
+=== Undefined scope
+
+Indirect values with undefined scope are safe to pass around, but the values they're referencing can not be safely accessed.
+For example, with `stem:[x] : stem:[T]* : stem:[T]*uRW`, it is unsafe to either call a method on `stem:[x]` or dereference it, reading its value.
+
+A C pointer has undefined scope by default (it is also neither readable nor writeable), and therefore should be unsafely cast to a desired pointer type prior to using, for example:
+
+====
+```nx
+extern int* get_some_int_ptr(void);
+
+def main
+  final ptr = unsafe! $get_some_int_ptr() : $int*
+  final result = *(unsafe! ptr as SBin32*sr) # Now we can read from it
+end
+```
+====
+
+Any-scoped indirect value may be safely cast to an undefined-scope indirect value, but not vice versa.
+
+== Functions
+
+A function may declare generic arguments.
+For that, a type identifier unavailable in the current scope shall be listed in a `forall` clause.
+A function generic argument is available within the function prototype and body.
+An unrestricted argument
+
+TODO: `{% if nx.ctx.impl.recv then %}`.
+
+=== Function declarations
+
+Function declarations are type-first.
+For example, in `decl foo(T)` the first argument is anonymous of type `T`, which is equivalent to `decl foo([0]: T)`.
+
+An explicit argument name or index may be provided, e.g. `decl foo([0]: x, y: T)`.
+After an explicit name, only explicit names are allowed.
+There shall not be gaps in indices, e.g. `decl foo([1]: T)` is invalid.
+
+An argument type may be omitted, but it would require its explicit name or index, e.g. `decl foo([0]:)`.
+
+====
+```nx
+# Invalid
+decl foo(x: T, U)
+decl foo(x: T, [0]: U)
+
+# Valid
+decl foo(T, x: T)
+decl foo(x: T, y: U)
+decl foo([0]: T)
+```
+====
+
+== Arguments
+
+Function and generic arguments share the same syntax.
+An argument requires an explicit name or index.
+An argument may have an alias, a type restriction and a default value.
+
+A function argument declaration has the same semantics as a value declaration.
+By default, a function argument is implicitly constant, i.e. `def foo(x)` is equivalent to `def foo(final x)`.
+Alternatively, an argument value may be declared variable: `def foo(let x)`.
+It is not possible to pass a constant as a variable argument.
+
+[TIP]
+--
+A constant value may be unsafely cast to a variable:
+
+```nx
+def foo(let arg);
+final x = 42
+foo(unsafe! x.as(SInt32&w))
+```
+--
+
+== Types
+
+.Type kinds
+Types are namespaces, traits, units, structs, classes, enums and annotations.
+This classification is known as a _type kind_.
+Structs, classes and enums are known as _data types_; their instances, called _objects_, may exist in runtime.
+
+.Generic types
+A _generic type_ contains at least one generic argument.
+
+.Type references
+A _type reference_ is a reference of a type identifier with or without generic arguments from the source or macro code.
+
+.Type instances
+A _type instance_ is an instance of a type, e.g. `let x : \SInt32 : Type<SInt32> = SInt32`.
+It may be used in runtime, compared to other types, called its static methods on, has its static fields accessed, and used as a generic argument.
+A `Type` instance itself does not carry any type information in runtime.
+
+.Type instances
+====
+```nx
+let x = SInt32
+
+@assert(x<Bitsize> == 32)
+@assert(x(42) == 42i32)
+
+# def foo(x : \T) forall T ~ SInt;
+def foo(x ~ \SInt);
+
+foo(x) # OK, eq. to `foo(SInt32)`
+```
+
+.Variants of type instances
+```nx
+let x = Std@rand(SInt32, FBin64)
+x : Variant<\SInt32, \FBin64>
+
+# `is?` is called on the actual variant option
+if x :? \SInt32
+  @assert(x(42) == 42i32)
+  Std.puts("`x` is `Type<SInt32>`")
+else
+  Std.puts("`x` is `Type<FBin64>`")
+end
+```
+====
+
+=== Generic types
+
+A generic type is a type containing at least one generic argument.
+A generic argument may be used within the type.
+
+=== Type specialization
+
+Qualification of an identifier (i.e. a lookup) under a type reference triggers the reference _specialization_.
+A specialization occurs once per unique generic arguments combination.
+An omitted generic argument is valid, has `nil` value in macros, and contributes into the uniqueness.
+A non-generic type may have at most one specialization.
+
+A specialization triggers evaluation of delayed macros contained directly within the type declaration.
+
+A delayed macro contained directly within a struct or class type declaration may evaluate to an instance field implementation.
+
+A specialization of a struct or class child type triggers specialization of its parent.
+
+A specialization of a deriving type triggers specialization of all the traits it derives from, in the order of derivation.
+
+A _complete type_ is a data type reference specialized with defined occupied size, or a unit type reference (which always has zero size).
+Any other type is _incomplete type_.
+
+Only a complete type shall be used as a runtime value type.
+However, an incomplete type instance is allowed, e.g. `let x : \SInt = SInt`.
+
+=== Members
+
+A type reference may contain _member_ entities: functions, macros, values and types.
+This classification is known as _member kind_.
+
+TIP: In that sense, every type is a name-space.
+
+Function and value members have _storage_, which is either _instance_ or _static_.
+In a trait, struct, class or enum type declaration, a function or value member declaration has implicitly instance storage, which may be changed to static.
+However, a enum type declaration disallows instance value member declarations, therefore it shall be explicitly set to static.
+In a namespace, unit or annotation type declaration, a function or value member declaration always has static storage, and it shall not be changed.
+
+=== Behavioural erasure
+
+With constraints applied to a value a compiler may or may not be able to interact with it in certain ways, e.g. call a specific method.
+This is known as a _behavioural erasure_.
+
+Both real and erasured types of a value are always known.
+
+Any type (including special types like `Type`, `Void` etc.) has built-in `is?`, `of?` and `as` methods defined, collectively known as _reflection methods_.
+Reflection methods are well-known and may be used as binary operators, e.g. `x is? T`.
+`is?` and `of?` shall not be used as function names, i.e. overloaded.
+`as` may be overloaded, e.g. for `0.5.as($float)`.
+
+```nx
+# Determine if the instance
+# is of exactly type `T`.
+#
+# ```
+# x = 42
+# @assert(x is? SInt32)
+# ```
+decl is?(\T) : Bool forall T
+alias :? = is? # E.g. `x :? T`
+
+# Determine if the instance is of
+# a type less than or equal to `T`.
+#
+# ```
+# x = 42
+# @assert(x of? Int)
+# ```
+decl of?(\T) : Bool forall T
+alias ~? = of? # E.g. `x ~? T`
+
+# Return the instance itself.
+decl as(\self) : self
+
+# Unsafely coerce the instance as
+# an instance of another type.
+unsafe decl as(\T) : T forall T
+```
+
+Reflection methods affect behavioural erasure of a entity.
+`as` becomes a fragile method when a compiler can prove it is not unsafe.
+
+A value may be constrained using `:` and `~` binary operators, whereas `:` requires right operand to be a complete type.
+
+====
+In this example, a well-known type `SInt32` is behaviour-erasured, so we can't access the constant `Max`, which is only defined for sized `SInt`s.
+
+```nx
+let x : SInt32 = 42 # `x` is constrained to `SInt32`
+@assert(x::Max == 4_294_967_295) # OK
+
+# # We're constraining `x` to `SInt`, and then
+# # try to access its `::Max` constant
+# x~SInt::Max # Panic! `Max` is not defined for `SInt`
+
+# Constraining to `SInt` in the current scope.
+# Now the compiler treats `x` as `SInt`,
+# but its true type is still preserved.
+x = x ~ SInt
+@typeof(x) # => SInt (SInt32) # Compiler still knows the real type
+
+@assert(x ~ SInt)
+# x::Max # Panic! Ditto
+
+# `~SInt` could theoretically be `SInt32`,
+# and we can check it in runtime.
+# A compiler may elide the actual comparison.
+if x :? SInt32
+  @assert(x::Max == 4_294_967_295)
+end
+```
+====
+
+An unconstrained generic argument has implicit type `Any`.
+An `Any` type instance does not allow any access other than reflection method calls.
+
+====
+```nx
+def foo(x : T) forall T # eq. to `forall T ~ Any`
+  # During the initial parsing,
+  # no real type is present
+  @typeof(x)  # => Any
+
+  # Actual type is revealed during a
+  # specialization, but it's still erasured
+  \@typeof(x) # => Any (SInt32)
+
+  # x += 1 # Panic! `Any` does not have method `+`
+
+  if x :? SInt32
+    \@typeof(x) # => SInt32 # No erasure is applied anymore
+    x += 1 # OK
+  end
+end
+
+foo(42i32)
+```
+====
+
+Behavioural erasure ignores any definitions from other than the constrained scope.
+The code in the example below would continue working even if added the `Drawable3D` trait to `Line`, or introduced an entirely new `Drawable4D` trait and derived it from both of the structs.
+
+====
+```nx
+trait Drawable2D
+  decl draw()
+end
+
+trait Drawable3D
+  decl draw()
+end
+
+# Point has the following methods:
+#
+# ```
+# final p = Point()
+# p.draw2d()
+# p.draw3d()
+# p~Drawable2D.draw()
+# p~Drawable3D.draw()
+# p.draw() # Panic! `Point:draw` is ambuguous between
+#          # `Point~Drawable2D:draw` and `Point~Drawable3D:draw`
+# ```
+struct Point
+  derive Drawable2D
+    # Callable as `Point~Drawable2D:draw`
+    # and `Point:draw2d`
+    impl draw() as self.draw2d;
+  end
+
+  derive Drawable3D
+    # Callable as `Point~Drawable3D:draw`
+    # and `Point:draw3d`
+    impl draw() as self.draw3d;
+  end
+end
+
+# Line has the following methods:
+#
+# ```
+# final l = Line()
+# l.draw()
+# l~Drawable2D.draw()
+# ```
+struct Line
+  derive Drawable2D
+    impl draw()
+  end
+end
+
+def draw2d(x : T) forall T ~ Drawable2D
+  @typeof(x) # => Drawable2D
+  \@typeof(x) # => Drawable2D (Point) # Or `Line`
+
+  x.draw() # OK, `:draw` is defined for any `Drawable2D`
+  # x.draw2d() # Panic! `:draw2d` is not defined for `Drawable2D`
+
+  if x is? Point
+    \@typeof(x) # => Point (Point)
+    x.draw2d() # OK, can call `Point`-specific method
+  end
+end
+
+draw2d(Point())
+draw2d(Line())
+```
+====
+
+Either in the form of a type annotation, or as a binary operator, a restriction operator contributes into the return-type overloading.
+
+====
+```nx
+def read() : String*
+def read() : Std::Twine
+
+# let x = read() # Panic! Can not infer type of `x`
+
+let x : String* = read() # OK
+let x = read() : Std::Twine # OK
+
+# Still enough information to
+# unambiguously choose an overload.
+let x : Pointer = read()
+@typeof(x) # => Pointer (String*) # The value is erasured, however
+x as String* # The coercion is safe here
+```
+====
+
+=== Type expressions
+
+A _type expression_ consists of multiple type references joined with logical operators `&&`, `||`, `^`, `!` and grouped with parentheses.
+A freestanding type reference is a degenerate case of a type expression.
+A type expression containing at least one logical operator is a _complex type expression_.
+
+A type expression may be _flattened_ to a comma-separated list of currently specialized complete types matching the expression using the `*` unary operator.
+For example, `++*++(SInt && !SInt32)` would likely evaluate to `SInt8, SInt16, SInt64, SInt128` (note the missing `SInt32`).
+A flattened list of types may be used as a list of generic arguments, for example, `Union<++*++(SInt32 || FBin64)>` would evaluate to `Union<SInt32, FBin64>`.
+As a syntactic sugar, a freestanding complex type expression or a freestanding flattened list turns into a `Variant` of types contained in the flattened expression, e.g. `𝐴 || 𝐵 : ++*++(𝐴 || 𝐵) : Variant<++*++(𝐴 || 𝐵)>`.
+
+NOTE: A type expression may be flattened to a list of complete types already specialized at the moment; it does not include unspecialized yet type references.
+
+Flattening a type expression is aligned with flattening a tuple type, e.g. `Union<*(A, B)> : Union<A, B>`.
+
+// TODO: `*-?>A`, `T::**-?>(A && B)` is enough? `*(A && B) : *-?>(A && B)`.
+A wildcard type may be used within a type expression, for example `++*++ < 𝑇` means "all types satisfying the `< 𝑇` condition".
+A `T::++*++` expression would match all types directly under the `T` namespace, for example `T::A`, but not `T::B::C` or `T`.
+A `T::++**++` expression would match all types under the `T` namespace, for example `T::A` and `T::B::C`, but not `T`.
+These may be combined, e.g. `T::++**++ < (U && V)`.
+A result of an expression containing a wildcard is a flattened list of matching types.
+// TODO: * turns into complete types only? Maybe it depends on something?
+Hence, `++*++(A && B)` is equivalent to `++*++ < (A && B)`.
+
+A type expression may be enumerated upon using mapping (`->`), filtering (`-?>`) and negative filtering (`-!>`) operators.
+
+A mapping block is not a "logic" complex type expression, but rather an _algebraic type expression_, where types are operated upon using `<`, `<~`, `<=`, `==` etc. built-in operators, and the mapped type is referenced with `$` or `$0` (which is aligned with anonymous block arguments syntax).
+
+Filtering and negative filtering blocks are complex type expressions, where the filtered type is matched.
+
+An example of an enumeration would be `: *(AbstractLogger)-!>(UnwantedLogger)->$&`, which evaluates to a variant of pointers to all  `AbstractLogger` specializations known at the moment of specialization, excluding the `UnwantedLogger` type.
+
+=== Type restriction
+
+Runtime values (which includes function return values) can be restricted to a concrete type using the `: T` notation, where `T` is a type expression.
+Such a restriction is a _concrete type restriction_.
+
+TIP: The notation is similar to the one used in the Type Theory, e.g. stem:[2 : nat].
+
+If a restriction type expression contains generic arguments, they are checked against sequentially and recirsively in the order of declaration in the restriction.
+For example, in `x : Array<Size: 3, Element: Foo<Bar>>`:
+
+. Ensure that `x` is `Array`
+. Ensure that `x::<Size>` is `3`
+. Ensure that `x::<Element>` is `Foo`
+. Ensure that `x::<Element>::<[0]>` is `Bar`
+
+TIP: A tuple is simply a generic type with its types listed as generic arguments.
+If a restriction is a tuple, its elements are checked sequentially, e.g. in `x : (A, B)`, `x` must be a tuple of two types `A` and `B`.
+
+A generic argument may be restricted to a type instance or a literal.
+For example, `Foo<T : \U || 42 || \%s>` would only allow `Foo<U>`, `Foo<42>` or `Foo<"bar">`.
+
+NOTE: `Foo<T : U>` would be invalid.
+
+When a type restriction is applied to a argument declaration, it is said that the declaration is _type-annotated_; the restriction _defines_ the type of the argument.
+
+When a type restriction is applied to runtime expression, it is used as a binary operator; the restriction is used to _ensure_ the type of the expression.
+A restriction binary operator returns the left operand on success, panicking otherwise.
+
+There are also soft-check versions of restriction binary operators: `:?` / `is?` and `~?` / `of?`, which evaluate to a boolean value.
+
+====
+```nx
+let x : SInt32 = 42 # A type-annotated variable definition
+Std.print(x : SInt32) # Ensure that `x` is `SInt32`
+
+# Soft-check if `x` is `SInt32`.
+# Would possibly evaluate to the `true` literal
+if x :? SInt32
+  Std.print("`x` is always `SInt32`")
+else
+  Std.print("`x` is always not `SInt32`")
+end
+
+# An algebraic expression
+# is applicable here.
+if @typeof(x) == SInt32
+  Std.print("`x` is always `SInt32`")
+else
+  Std.print("`x` is always not `SInt32`")
+end
+
+let y = Std@rand(42, 0.5) : Variant<SInt32, FBin64>
+
+# Soft-check if `y` is currenty `SInt32`.
+# Would perform a runtime check.
+#
+# NOTE: It calls `.is?(SInt32)` on
+# the actual option of the variant.
+if y is? SInt32
+  Std.print("`y` is currently `SInt32`")
+else
+  Std.print("`y` is currently `FBin64`")
+end
+
+# An algebraic expression is not applicable here,
+# because `@typeof` evaluates in compile-time, so
+# `@typeof(x)` would always be `Variant<SInt32, FBin64>`.
+if @typeof(x) == SInt32 # Would always evaluate to `false`
+  @unreacheable
+end
+```
+====
+
+=== Fuzzy type restriction
+
+`: T` is a concrete type restriction, whereas `~ T` is a _fuzzy type restriction_.
+
+A concrete restriction requires the expression to evaluate to a concrete type, whereas a fuzzy restriction does not.
+Instead, a fuzzy restriction requires the restricted value type to be _either_ of concrete types matching the type expression.
+For example, `~ SInt` matches any `SIntN`, where `N` is bitsize.
+
+Therefore, a fuzzy restriction shall not be used as a field or local value type annotation.
+But if it is used as an argument declaration type annotation, (a) it leads to specialization for every matching type, (b) it may use polymorphism.
+
+DRAFT: When a type is fuzzy-restricted, you can not query its real type?
+So this is orthogonal to a concrete type restriction.
+
+=== Namespaces
+
+A namespace type may only contain static functions and values.
+
+=== Units
+
+A unit type is a singleton, it only has one global runtime instance.
+A unit type occupies zero space.
+Initialization of a unit type returns itself (not a copy).
+
+=== Variant
+
+During runtime, each call on a variant implicitly switches on its actual option and calls the method on the option.
+Therefore, to call a method on a variant, the method shall be implemented for every possible option of the variant.
+
+// Taking a pointer to a local variant, and then writing to it, does not allow the "safely cast a local variant after check" concept to work.
+
+=== Data types
+
+==== Enum
+
+A enum type is a collection of named integer values.
+
+By default, an underlying type of a enum is `SInt32`, but it can be changed explicitly, e.g. `enum Foo : UInt16`.
+Only a `Int` type may be a enum underlying type.
+
+The very first defined enum value has an implicit underlying value of zero.
+Each enum value defined is implicitly incremented by one from the previous defined value.
+A enum value definition may have an explicit underlying value assigned, e.g. `val Foo = 3`.
+
+[TIP]
+--
+For Rust-like enums, create a distinct alias for a Variant.
+
+.Rust-like enums
+====
+```nx
+distinct alias MyRustEnum = Variant<SInt32, Vector<FBin64, 2>>
+  def product : SInt32 || FBin64
+    if this.is?(SInt32)
+      return this.as!(SInt32)
+    else
+      return this.as!((FBin64)x2).product()
+    end
+  end
+end
+```
+====
+--
+
+== Functions
+
+If a function body contains delayed macros, then it is guaranteed to specialize per matching type of a fuzzy restriction?
+
+Built-in methods are `is? == :?`, `of? == ~?` and `as!`.
+They can not be overloaded, but can be used as binary operators, e.g. `(x is? T) == (x :? T) == (x.is?(T))`.
+`as!` means unconditional coercion and is always unsafe.
+
+Additionally, an `as` method is defined for `self` only, and it can be overloaded.
+
+`to_` method family may also be overloaded.
+`x to SInt32 == x.to(SInt32) == x.to_i32`.
+
+== Piping
+
+A entity may be piped to reduce code duplication.
+
+.A "self-pipe"
+An `x |𝐸` expression expands to `(x𝐸; x)`.
+For example, `x |.y = 42` -> `(x.y = 42; x)`.
+stem:[E] must be either a lookup (`|:`, `|::`) or a method call (`|.`).
+No whitespace is allowed after `|` to avoid confusion with a binary operator `|`.
+To control precedence, use parentheses.
+For example, `x |.a = b |.foo` -> `(x.a = (b.foo; b); x)`, but `x |.a=(b) |.foo` -> `((x.a = b; x).foo; x)`.
+
+.A "block pipe"
+An `x |> 𝐸` expression expands to `(𝐸)`, where stem:[E] is a block of code with a single anonymous block argument `x`.
+For example, `x |> foo($)` -> `(foo(x))`.
+Unlike self-pipes, block pipes are always "flat", e.g. `x |> $.foo |> $.bar` expands to `((x.foo).bar)`.
+Therefore, the block pipes concept is similar to POSIX pipes.
+
+.A "tapping pipe" or "self-returning block pipe"
+An `x <|> 𝐸` expression is similar to block pipe, but it expands to `(𝐸; x)`, returning the argument.
+For example, `x <|> foo($)` -> `(foo(x); x)`.
+
+TIP: The name is after Ruby's `#tap` method.
+
+.Piping
+====
+```nx
+x
+  |.foo     # Simple pipe, returns `x`
+  |> $.bar  # Block pipe, returns the evaluation result
+  <|> $.baz # Tapping pipe, returns the argument (`x.bar`)
+
+  # A multi-line block pipe version
+  # with block boundaries and prologue
+  |> |(arg)| do
+    qux(arg)
+  end
+
+# Is equivalent to:
+#
+
+final %%0 = ((x.foo; x).bar)
+qux((%%0.baz; %%0))
+```
+====

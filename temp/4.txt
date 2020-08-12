@@ -1,0 +1,34 @@
+
+def foo(x : Drawable2D)
+  @typeof(x)  # => Undef~Drawable2D
+  \@typeof(x) # => Point~Drawable2D
+
+  x.draw() == x~Drawable2D.draw()
+
+  if x is? Point
+    @typeof(x) # => Undef~Drawable2D
+    x.point()
+    # x.draw()
+    x~Drawable2D.draw()
+    x.draw2d()
+    x.draw3d()
+    x~Drawable3D.draw()
+  end
+end
+
+def foo
+  final var = Std@rand(42, 0.5) : Variant<SBin32, FBin64>
+  var.abs() # OK
+
+  var = if rand()
+    var~Numeric
+  else
+    var
+  end
+
+  # var.abs() # Panic!
+  return var : Variant<
+    Variant<SBin32, FBin64>,
+    Variant<SBin32, FBin64>~Numeric
+  > : Variant<SBin32, FBin64, SBin32~Numeric, FBin64~Numeric>
+end

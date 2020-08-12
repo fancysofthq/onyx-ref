@@ -1,0 +1,27 @@
+
+# Argument is still `arg : Undef`.
+# Does `arg : Auto` make sense?
+# Yes. `arg : Undef~Undef` prohibits any calls,
+# whereas `arg : Auto~Auto` allows any calls and updates
+# the automatically inferred type based on these calls.
+def main
+  # `Auto` expands depending on the context, i.e. whatever is assigned to `result`, whereas `Any` means "anything declared in the program".
+  let result : Auto
+
+  # Imaginary type of `Auto` changes based on assignment!
+  result = int_calc()
+  @typeof(result) # => Auto~SBin32
+  \@typeof(result) # => Auto~SBin32
+  \!@typeof(result) # => Variant<SBin32, FBin64>~SBin32
+  result.abs()
+  if result.is?(SBin32) # Exceptional case? `is?` is special
+
+  # ...
+
+  result = float_calc()
+  @typeof(result) # => Auto~FBin64
+  \@typeof(result) # => Auto~FBin64
+  \!@typeof(result) # => Variant<SBin32, FBin64>~FBin64
+  result.floor()
+  if result is? (FBin64)
+end

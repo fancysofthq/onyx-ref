@@ -1,0 +1,32 @@
+trait AbstractLogger { decl log; }
+
+class Processor
+  let logger : Any~AbstractLogger*sr
+
+  impl initialize(this.logger);
+
+  def process
+    @typeof(logger)  # => Any~AbstractLogger*sr
+    \@typeof(logger) # => Any~AbstractLogger*sr
+    \!@typeof(logger) # => Variant<MyLogger, ...>~AbstractLogger*sr
+    (logger->).log()
+  end
+end
+
+class MyLogger
+  derive AbstractLogger { impl log(); }
+end
+
+ptr = AbstractLogger*
+# ptr->.log()
+
+ptr = Variant<MyLogger, MyFooLogger>*
+ptr->.log()
+
+def main
+  final logger = MyLogger()
+  final proc = Processor(&logger)
+  proc.process()
+end
+
+Variant<SBin32, FBin64>(0.5)

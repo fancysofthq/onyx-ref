@@ -5,6 +5,78 @@
 :sectnums:
 :sectlinks:
 
+== TODO:
+
+Static means outside of call stack, but not necessarily program-wide.
+
+Think about having `caller` (`c`) and `stack` (`k`) scopes separately; returning `c` casts to local, returning `k` casts to `k`?
+
+Think on passing scoped variables to lambda, i.e. closure.
+Done: it may only accept static or undefined pointers.
+
+Variants and atomics have their own semantics on assigning.
+
+Only classes may have traits.
+It allows to have `mut` for trait methods.
+
+Remove units, because it's not defined on where to store them, in which address space.
+
+`is?` and `of?` affect compilation, they are called on a *real* type instead of imaginary.
+All other methods are called on imaginary.
+But `as` is called on imaginary?
+No, on real as well.
+
+```nx
+final var = Std@rand(42, 0.5) : Variant<SBin32, FBin64>
+var.abs()
+# var~Numeric.abs()
+```
+
+Real type is constant, while imaginary type can change during runtime.
+
+Restricting on a real type makes the imaginary type equal to the real type:
+
+```nx
+trait Drawable2D { decl draw() }
+trait Drawable3D { decl draw() }
+
+class Point
+  derive Drawable2D
+    impl ~draw as draw2d;
+  end
+
+  derive Drawable3D
+    impl ~draw as draw3d;
+  end
+end
+
+# Changing `Drawable2D` to `Drawable3D` here
+# shall not change the branch contents.
+def foo(x : Drawable2D)
+  @typeof(x)  # => Undef~Drawable2D
+  \@typeof(x) # => Point~Drawable2D
+
+  x.draw() == x~Drawable2D.draw()
+
+  # NOTE:
+  if \@typeof(x)[0] == Point
+    @typeof(x) # => Undef~Drawable2D
+
+  # BUT: (`is?` is SpEcIaL)
+  if x is? Point
+    @typeof(x) # => Point~Point
+    x.point()
+    # x.draw()
+    x~Drawable2D.draw()
+    x.draw2d()
+    x.draw3d()
+    x~Drawable3D.draw()
+  end
+end
+```
+
+Returned type may have `Auto`.
+
 == Document
 
 It contains explainations and rationale, which are rare in the Standard.
@@ -531,6 +603,8 @@ Assigning an rvalue to an lvalue simply _moves_ the value into the lvalue, makin
 
 Assigning an lvalue to another lvalue of the same type calls a copy initializer on the right operand, and moves the rvalue result to the left operand.
 In [line-through]#other words# symbols, `stem:[l]~0~ : stem:[T]& = stem:[l]~1~ : stem:[T]&` stem:[=>] `stem:[l]~0~ = stem:[T](&stem:[l]~1~) : stem:[T]`.
+
+TODO: Assigning to a variant.
 
 // An lvalue itself (i.e. not the referenced value, but reference itself) may be assigned to another lvalue using the direct assignment operator `:=`.
 // The direct assignment operator is applied directly to the left operand, instead of proxying the assignment to the referenced value.
@@ -1081,6 +1155,19 @@ For that, a type identifier unavailable in the current scope shall be listed in 
 A function generic argument is available within the function prototype and body.
 An unrestricted argument
 
+If a function body contains delayed macros, then it is guaranteed to specialize per matching type of a fuzzy restriction?
+
+Built-in methods are `is? == :?`, `of? == ~?` and `as!`.
+They can not be overloaded, but can be used as binary operators, e.g. `(x is? T) == (x :? T) == (x.is?(T))`.
+`as!` means unconditional coercion and unsafe unless the argument is `self` or a compiler can prove safety of the coercion (e.g. for a local-scoped variant instance within a branch).
+
+`x.is?(Undef~U) == x.of?(U)`.
+
+// Additionally, an `as` method is defined for `self` only, and it can be overloaded.
+
+`to(type)` and `to_` methods family may also be overloaded.
+`x to SInt32 == x.to(SInt32) == x.to_i32`, also `x.to_$i`.
+
 TODO: `{% if nx.ctx.impl.recv then %}`.
 
 === Function declarations
@@ -1533,12 +1620,94 @@ A unit type is a singleton, it only has one global runtime instance.
 A unit type occupies zero space.
 Initialization of a unit type returns itself (not a copy).
 
-=== Variant
+=== Variants
 
-During runtime, each call on a variant implicitly switches on its actual option and calls the method on the option.
-Therefore, to call a method on a variant, the method shall be implemented for every possible option of the variant.
+A variant is a xref:_unions[union] of values (called _options_) with an unsigned integer switch determining its actual option.
 
-// Taking a pointer to a local variant, and then writing to it, does not allow the "safely cast a local variant after check" concept to work.
+Akin to a union, the order of options in a variant is irrelevant, i.e. `Variant<stem:["A"], stem:["B"]> == Variant<stem:["B"], stem:["A"]>`.
+
+Internal layout of a variant is undefined.
+// , unless it is a variant of a single pointer and `Void`: in that case, the layout equals to the pointer's, and the `Void` option implies all bits set to zero.
+// It implies safe coercion to a nullable C pointer, e.g. `SBin16*? as! $int*`.
+
+An access to a variant in runtime is first attempted on the variant instance itself, and then transparently delegated to its actual option.
+Therefore, an accessed member shall be implemented for every option of the variant.
+
+The rule also applies to built-in methods `is?`, `of?` and `as!`.
+
+An `as!` call is threadsafe on a local-scoped reference, or fragile on a statically-scoped reference, to a variant which is proved to have a concrete option.
+
+====
+A simple example demonstrating access to a variant's options.
+
+```nx
+struct Foo { decl x() }
+struct Bar { decl x(); decl y() }
+
+final var = Std@rand(Foo(), Bar()) : Variant<Foo, Bar>
+var.x() # OK, declared for both options
+# var.y() # Panic! `y` is not declared for `Foo`
+
+# A `.switch()` call returns an unsigned integer with
+# minimum required bitsize to store the variant switch.
+@assert(var.switch() :? UBin1)
+
+# Calling `.as!()` is unsafe here,
+# because there is no compile-time
+# information to guarantee that
+# `var` is actually `Bar`.
+unsafe! var.as!(Bar).y()
+
+if var.is?(Bar)
+  # Here, a compiler is able to proof
+  # that `var` is currently `Bar`, thus
+  # the `.as!(Bar)` call is threadsafe.
+  var.as!(Bar).y()
+
+  # Note that `var` itself is still a variant.
+  var = Foo()
+
+  # # A compiler knows that the variant
+  # # can not currently be `Bar`.
+  # var.y() # Panic!
+end
+```
+
+Passing a variant outside of Onyx context has no defined semantics, but totally feasible.
+The example may be further improved using macros.
+
+```nx
+export union val_t {
+  int int_v;
+  double double_v;
+};
+
+export struct var_t {
+  int sw;
+  union val_t un;
+};
+
+export enum SWITCH {
+  INT,
+  DOUBLE
+};
+
+export struct var_t get_variant() {
+  final var = Std@rand($int(42), $double(42)) : Variant<$int, $double>
+
+  return case var
+    when $int
+      $var_t(
+        sw: $SWITCH::INT,
+        un: $val_t(int_v: var.as($int)))
+    when $double
+      $var_t(
+        sw: $SWITCH::DOUBLE,
+        un: $val_t(double_v: var.as($double)))
+  end
+}
+```
+====
 
 === Data types
 
@@ -1572,19 +1741,6 @@ end
 ```
 ====
 --
-
-== Functions
-
-If a function body contains delayed macros, then it is guaranteed to specialize per matching type of a fuzzy restriction?
-
-Built-in methods are `is? == :?`, `of? == ~?` and `as!`.
-They can not be overloaded, but can be used as binary operators, e.g. `(x is? T) == (x :? T) == (x.is?(T))`.
-`as!` means unconditional coercion and is always unsafe.
-
-Additionally, an `as` method is defined for `self` only, and it can be overloaded.
-
-`to_` method family may also be overloaded.
-`x to SInt32 == x.to(SInt32) == x.to_i32`.
 
 == Piping
 
@@ -1631,3 +1787,4 @@ final %%0 = ((x.foo; x).bar)
 qux((%%0.baz; %%0))
 ```
 ====
+

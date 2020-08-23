@@ -4,6 +4,8 @@
 :toclevels: 3
 :sectnums:
 :sectlinks:
+:icons: font
+:xrefstyle: full
 
 == TODO:
 
@@ -80,6 +82,7 @@ Returned type may have `Auto`.
 == Document
 
 It contains explainations and rationale, which are rare in the Standard.
+It also "speaks" with a reader (e.g. "you", "we").
 
 == Philosophy
 
@@ -308,20 +311,22 @@ Namespace, annotation, trait and unit types are implicitly declared; for example
 
 An implementation statement (`impl`) implements a previously declared entity.
 
-Only a data type, function or macro entity may be implemented.
+Only a data type, or function or macro member may be implemented.
 
 === `def`
 
 A definition (`def`) is a declaration and implementation of a entity in the same statement.
 
-Struct, class and enum types, as well as values, functions and macros are implicitly defined; for example, `struct Foo` is equivalent to `def struct Foo`.
+Struct, class and enum types, as well as reference, function and macro members are implicitly defined; for example, `struct Foo` is equivalent to `def struct Foo`.
 However, even such a entity may be explicitly declared prior to implementation, for example:
 
 ====
 ```nx
 decl struct Foo;
 
-# Either is valid.
+# Either one would be valid,
+# but a struct may only
+# be implemented once!
 #
 
 impl struct Foo;
@@ -499,58 +504,461 @@ bar = 43 # OK
 ```
 ====
 
-== Literals
+== Interoperability
 
-Literal instances.
+An Onyx compiler is required to be aware of the C Standard.
+Non-standard C conformance is optional, but discouraged.
 
-|===
-| Expression | Meaning | Examples
+There is no Onyx ABI, and Onyx functions have undefined symbols in assembly.
+To make an Onyx function "visible" in an object file, hence callable from assembly, a developer should `export` it as a C function.
 
-| `\%real`
-| Real number
-| `-1`, `-0.5`, `-1/2`, `0`, `0.5`, `1/2`, `1`
+TIP: The Standard does not define any built-in "entry" function semantics.
+It is a linker's responsibility to start a process with a function considered the entry one.
+Luckily, an Onyx compiler is required to be able to emit AST.
+A linker script may then be generated pointing to an annotated function.
 
-| `\%int`
-| Integer number
-| `-1`, `0`, `1`
+C header files may be included (_imported_ in Onyx terminology), and all the C entities imported throughout the program compilation are accessible via the `$__<id>__` notation, e.g. `$printf`.
 
-| `\%nat`
-| Natural number
-| `0`, `1`
+A C function call is unsafe, and shall have parentheses regardless of arity.
 
-| `\%bool`
-| Boolean
-| `false`, `true`
+Some Onyx type specializations can be autocast to a C type upon calling a C function, e.g. `String<10, UTF8>` is `char[10]`.
+Unfortunately, looseness of the C Standard restricts automatic convertsion of, say, `String<10, UTF16LE>` to `char16_t[10]`, because `char16_t` is not guaranteed to contain exactly UTF-16 encoded characters.
+In such cases, explicit, maybe unsafe, conversion or coercion is required.
+Moreover, a C function has undefined scope, thus passing an Onyx pointer to it would likely be unsafe for itself.
 
-| `\(%nat, %nat)`
-| Tuple of literals
-| `(1, 2)`
-
-| `\(foo: %nat)`
-| Named tuple of literals
-| `(foo: 1)`
-
-| `\..%nat`
-| Range literal
-| `1..2`, `0\...`, `%r[0 max)`
-|===
-
-.Literal instance
 ====
 ```nx
-let t : \%nat = 2 # A literal instance
+import "stdio.h"
 
-def times(t ~ %nat)
-  \{% for i = 1, nx.scope.t.value do %}
-    Std.puts("Hi\0")
-  \{% end %}
-end
+export void main(int argc, char** argv) {
+  # Threadsafe Onyx code inside
+  # an exported function body
+  #
 
-times(t) # Would output `Hi` two times
+  let msg = "Hello, world!\0" : String<15, UTF8>
+  unsafe! $puts(&msg)
+}
 ```
 ====
 
+Despite of that the Onyx safety within an exported function is the default threadsafe, an exported function call is still unsafe.
+
+An exported function shall not be throwing.
+
+An exported function, as well as its argument declarations, may be annotated.
+An exported function argument reference is writeable by default, unless has a `const` qualifier.
+
+An exported function, as well as its argument declarations, may be documented using Onyx comments.
+Only an exported function documentation is preserved on exported; argument documentation is ignored.
+
+A C primitive type has layout defined per compilation.
+It usually depends on the target platform data model.
+For example, passing `{ c: { int { size: 32, signedness: 2c } } }` to an Onyx compiler would make all `$int` instances 32 bit and 2's complement within Onyx context.
+However, due to the target dependency, an explicit conversion is still required.
+
+TIP: An advanced Onyx compiler usually has built-in mapping for C data type sizes, so you won't need to pass them every time you compile your code.
+
+An Onyx compiler is required to implement a subset of C operators.
+
+====
+```nx
+export int sum(int a, int b) {
+  return a + b # Use native C summation operator
+}
+
+export int sub(int a, int b) {
+  # `$int` may be greater than 32 bits,
+  # thus data loss is possible.
+  let onyx_a = a.to!(SBin32)
+
+  # Would only work with `{ c: { int {
+  # size: 32, signedness: 2c } } }`.
+  # Otherwise, the behaviour is undefined.
+  let onyx_b = unsafe! b as SBin32
+
+  let result = onyx_a - onyx_b
+
+  # Data loss is possible if
+  # `$int` bitsize is < 32.
+  return result.to!($int)
+}
+
+export void main() {
+  try
+    # Native C equation operator
+    @assert(unsafe! sum(1, 2) == 3)
+
+    @assert(unsafe! sub(1, 2).to_i32!() == -1)
+  catch
+    unsafe! $exit($(EXIT_FAILURE))
+  end
+}
+```
+====
+
+=== C data types
+
+A C struct or union definition may also be exported.
+An exported data type is treated in as if it was imported.
+
+An imported named C struct or union has semantics identical to an Onyx `struct` or `Union`.
+This imples:
+
+* Default initializers, Onyx-style.
+Note that exported C entities are zero-initialized.
+
+* Reopening with static function and method declaration thanks to UFCS.
+
+* Unsafe access to union options, which may be flattened to fields.
+
+====
+```nx
+import "math.h", "stdlib.h"
+
+export struct struct_t {
+  double x;
+  double y;
+
+  unsigned sw;
+  union {
+    float foo;
+    short bar;
+  };
+};
+
+reopen $strukt_t
+  # Note that the function is not exported.
+  #
+  # ≡ `public threadsafe def length(&this : $strukt_t*cr) : $double`
+  def length
+    return unsafe! $sqrt($pow(this.x, 2) + $pow(y, 2))
+  end
+
+  def val : Variant<$float, $short>
+    # Accessing union-ed fields is unsafe.
+    (sw == 0) ? (unsafe! foo) : (unsafe! bar)
+  end
+end
+
+export void main() {
+  # `sw` is zero-initialized.
+  let s : $strukt_t = $strukt_t(1,  2, foo: 42)
+
+  try
+    # Passes `s` by pointer.
+    @assert(s.length().to_f64!().~=(2.236, 0.01))
+    @assert(s.val().<unsafe!>as!(FBin64) == 42)
+  catch
+    unsafe! $exit($(EXIT_FAILURE))
+  end
+}
+```
+====
+
+=== C variables
+
+A C variable may be exported as well.
+In respect to C, zero initialization is implied if the value is omitted.
+
+An exported variable reference has `static` scope in Onyx and is writeable unless has `const` qualifier.
+
+It is possible to export a C-static variable as well.
+It would be treated as `private` in terms of Onyx.
+
+TODO: What happens upon taking a file-local variable's address and passing it outside?
+In regard to Onyx as well.
+
+.Exporting a C variable
+====
+import "stdlib.h"
+
+extern int foo;
+
+export void main() {
+  try
+    @assert($foo : $int&srw == 0)
+  catch
+    unsafe! $exit($(EXIT_FAILURE))
+  end
+}
+====
+
+=== C macros
+
+C preprocessor macros may also be imported and exported.
+
+A C macro within Onyx context is used as follows: `$(MACRO)`.
+The evaluation result of a macro is inserted into Onyx with prior processing.
+
+Within an exporting context, C macros may intuitively be used as they'd be in pure C.
+For example, `export MY_MACRO_VOID main() {` could theoretically expand to `export void main() {`.
+The resulting code is then parsed as usual.
+
+=== External declarations
+
+A C function, struct, union or variable may be marked externally declared using the `extern` directive from Onyx code.
+This is equivalent to importing a declaration.
+That means that the entity would be defined at some later point of linkage.
+The behaviour is similar to declaration in Onyx: a single entity may be `extern`ed multiple times, but only `export`ed or imported once.
+
+.Externing C entities
+====
+The following code would fail to compile if symbol `foo` is not resolved during linkage.
+
+```nx
+import "stdio.h"
+
+extern int foo;
+
+export void main() {
+  unsafe! $printf(&"%d\n", $foo)
+}
+```
+====
+
+== Literals
+
+=== Literal constrainment
+
+When read from source, a literal has inferred constrainment in accordance to xref:table-literal-constrainments[].
+
+In code, a literal constrainment has form of `\<__constrainment__>`, e.g. `0.5 : \q`.
+A literal constrainment is a type-level restriction, not an instance-level restriction.
+It may be used to restrict a literal in-place or define a generic literal argument, e.g. `def foo(arg: _ : L) forall L : \q`.
+
+CAUTION: Both `def foo(arg: L) forall L : \q` and `def foo(arg : \q)` would panic, because a literal shall not be an instance.
+
+A constrainment is defined by a regular expression.
+For example, `/f(?<Bitsize>\d+)/` defines `\f16`, `\f32` etc.
+
+TODO: Restricting a literal to a concrete type is possible, but not vice versa, e.g. `42 : \%n : SBin32`, but not `42 : SBin32 : \%n`.
+Also `42 : \%u : SBin32` is not possible.
+
+TODO: Only basic `\%real`, `\%int`, `\%nat`, `\%bool`, `\%string` and `\%char` restictions are needed.
+No literal instances.
+Still can apply (partial) suffixes.
+
+[[table-literal-constrainments]]
+.Basic literal constrainments
+|===
+| Literal examples | Constrainment regex | Default type | Notes
+
+| `false`, `true`
+| `/b/`
+| `Bool`
+| A boolean literal.
+
+| `0`, `1`
+| `/n`
+| `SBin32`
+| A https://en.wikipedia.org/wiki/Natural_number[natural number] (stem:[NN]) literal.
+
+| `-1`
+| `/z/`
+| `SBin32`
+| An https://en.wikipedia.org/wiki/Integer[integer] (stem:[ZZ]) literal.
+
+| `1.0`
+| `/q/`
+| `FBin64`
+| A https://en.wikipedia.org/wiki/Rational_number[rational number] (stem:[QQ]) literal.
+
+| `'a'`
+| `/c/`
+| `Char<UCS>`
+| A character literal.
+
+4+^| Special literals
+
+| `:abc`
+| `\y`
+| [gray]#N\A#
+| A symbol literal.
+|===
+
+Compound literals are basic literals with some modifications.
+The inferred basic constrainment becomes a part of the compound constrainment.
+For example, `0/1 : \rn` is a ratio of two natural literals.
+
+.Compound literal constraints
+|===
+| Literal examples | Constrainment regex | Default type conum:1[] | Notes
+|
+| `0//1`
+| `/r(?<Constraint>.+)/`, e.g. `ri32`
+| `Ratio<__Constraint__>`
+| A ratio (as https://en.wikipedia.org/wiki/Quotient#Quotient_of_two_integers[quotient of two integers]) literal.
+
+| `0j`
+| `/j(?<Constraint>.+)/` , e.g. `ji32`
+| `Imaginary<__Constraint__>`
+| An imaginary number literal.
+
+| `0..1`
+| `\..stem:[tt"L"]`, e.g. `\..n`
+| `Range<stem:[tt"L"]>`
+| An interval literal.
+
+| `"abc"`
+| `\s`
+| `String<UTF8>`
+| A string literal.
+
+| `[0, 1]`
+| `\stem:[tt"L"][stem:[tt"Z"]]`, e.g. `\n[2]`
+| `Array<stem:[tt"L"], stem:[tt"Z"]>`
+| An array literal.
+
+| `<0, 1>`
+| `\stem:[tt"L"]<stem:[tt"Z"]>`, e.g. `\n<2>`; or `\(stem:[tt"L"])xstem:[tt"Z"]`, e.g. `\(n)x2`
+| `Vector<stem:[tt"L"], stem:[tt"Z"]>`
+| A vector literal.
+
+| `\|[0, 1], [2, 3]\|r`
+| `\(stem:[tt"L"])xstem:[{tt"Z"}]stem:[tt"D"]`, e.g. `\(n)x2x2r`
+| `Tensor<stem:[tt"L"], *stem:[tt"Z"], stem:[tt"D"]>`
+| A tensor literal.
+
+| `(0, 1.0)`
+| `(stem:[{tt"L"}])`, e.g. `(\n, \q)`
+| `Tuple<*stem:[tt"L"]>`
+| A tuple of literals.
+
+| `(foo: 0, bar: 1.0)`
+| `(stem:[{tt"L"}])`, e.g. `(foo: \n, bar: \q)`
+| `Struct<*stem:[tt"L"]>`
+| An anonymous struct of literals.
+|===
+
+<1> `__Constrainment__` is the default type for the base literal, e.g. `1/0` would default to `Ration<SBin32>`.
+
+A complete constrainment is one constraining to a complete type.
+For example, `\i32` is complete, but `\n` is not.
+
+A numeric literal constrainment can be further constrained to a specific numeric type using a suffix from xref:table-numeric-literal-suffixes[].
+The resulting constrainment equals to the suffix applied.
+For example, `1u8 : \u8`.
+
+NOTE: Simply constraining a literal has the same effect as applying a suffix to it, e.g. `1 : \u8` stem:[-=] `1u8`.
+
+TODO: A specific-type constrainment (even partial) restricts the target type.
+For example, `1u` can not be used as `FBin32`; also `1q` can not be used as an integer.
+
+A character literal may also have a numeric suffix appended: it would turn it into a numeric literal, e.g. `'a'u8 : \u8 == 97`.
+Appending a numeric suffix to a string turns it into an array of numeric literals representing the string's codeunits, e.g. `"abc"u8 : \u8[3] == %u8[97 98 99]`.
+
+Literal value and suffixes may be separated with underscores or wrapped in parentheses.
+For example, `(42n)_i32`.
+A constrainment is always flattened, thus e.g. `\(z)_fb64` is interchangeable with `\f64`.
+
+[[table-numeric-literal-suffixes]]
+[cols="2, 1, 1", options="header"]
+.Numeric literal contrainments
+|===
+| Regex | Applicable to conum:1[] | Default type
+
+| `/**n**/`
+| `\n`
+| `SBin32`
+
+| `/**z**/`
+| `\n`, `\z`
+| `SBin32`
+
+| `/**q**/`
+| `\n`, `\z`, `\q`
+| `FBin64`
+
+| `/s?**i**b?(?<__Bitsize__>\d+)?/`
+| `\n`, `\z`
+| `SBin<__Bitsize__ = 32>`
+
+| `/**u**i?b?(?<__Bitsize__>\d+)?/`
+| `\n`
+| `UBin<__Bitsize__ = 32>`
+
+| `/(si?\|**i**)**d**(?<__Digits__>\d+)/`
+| `\n`, `\z`
+| `SDec<__Digits__>`
+
+| `/**u**i?**d**(?<__Digits__>\d+)/`
+| `\n`
+| `UDec<__Digits__>`
+
+| `/**f**b?(?<__Bitsize__>\d+)?/`
+| `\n`, `\z`, `\q`
+| `FBinstem:[<<]__Bitsize__ = 64stem:[>>]`
+
+| `/f?**d**(?<__Bitsize__>\d+)?/`
+| `\n`, `\z`, `\q`
+| `FDecstem:[<<]__Bitsize__ = 64stem:[>>]`
+
+| `/s?**Q**(?<__Bitsize__>\d+)?(e(?<__Exponent__>-?\d))?/` conum:2[]
+| `\n`, `\z`, `\q`
+| `SXBin<__Bitsize__, __Exponent__>`
+
+| `/**uQ**(?<__Bitsize__>\d+)?(e(?<__Exponent__>-?\d))?/` conum:2[]
+| `\n`, `\z`, `\q` conum:3[]
+| `UXBin<__Bitsize__, __Exponent__>`
+
+| `/s?**D**(?<__Total__>\d+)?(f(?<__Fractional__>-?\d+))?/` conum:2[]
+| `\n`, `\z`, `\q`
+| `SXDec<__Total__, __Fractional__>`
+
+| `/**uD**(?<__Total__>\d+)?(f(?<__Fractional__>-?\d+))?/` conum:2[]
+| `\n`, `\z`, `\q` conum:3[]
+| `UXDec<__Total__, __Fractional__>`
+
+| `/**p**(?<__Bitsize__>\d+)/`
+| `\n`, `\z`, `\q`
+| `Positstem:[<<]__Bitsize__stem:[>>]`
+
+// | `/**b**(?<__Bitsize__>\d+)/`
+// | `\n`, `\z`, `\q`
+// | `BFloatstem:[<<]__Bitsize__stem:[>>]`
+|===
+
+<1> Always applicable to `\c` and `\s`.
+<2> Either one of generic arguments is required.
+<3> Literal signedness is checked.
+
+A character literal (`\c`) may have a xref:table-character-set-literal-suffixes[character set suffix] appended before a numerical suffix.
+A string literal (`\s`) may have an xref:table-encoding-literal-suffixes[encoding suffix] appended before a numerical suffix.
+
+A text literal suffix replaces the constrainment, and makes it incompatible with the initial constrainment, e.g. `'a' : \ucs` is legal, but `'a'ucs : \c` is not.
+
+TIP: The language is only aware of https://en.wikipedia.org/wiki/Unicode[Unicode] and its modern encodings, excluding other character sets.
+
+[[table-character-set-literal-suffixes]]
+.Character set literal suffixes
+|===
+| Regex | Type
+
+| `/ucs/`
+| `Char<UCS>`
+|===
+
+[[table-encoding-literal-suffixes]]
+.Encoding literal suffixes
+|===
+| Regex | Type
+
+| `/utf8/`
+| `String<https://en.wikipedia.org/wiki/UTF-8[UTF8]>`
+
+| `/utf(16\|32)[lb]e/`
+| E.g. `String<https://en.wikipedia.org/wiki/UTF-16[UTF16LE]>`
+
+| `/ucs(2\|4)/`
+| E.g. `String<https://en.wikipedia.org/wiki/Universal_Coded_Character_Set[UCS2]>`
+
+// | `/scsu/`
+// | `String<https://en.wikipedia.org/wiki/Standard_Compression_Scheme_for_Unicode[SCSU]>`
+|===
+
 === Range literals
+
+TODO: Only have `[]` intervals?
 
 [cols="2*m, 1, 1m", options="header"]
 |===
@@ -635,11 +1043,11 @@ If so, both pushing and swapping may be possible.
 
 A reference may be turned into an rvalue using the `++<-++` unary operator.
 After that, the reference is considered _moved_.
-The resulting rvalue may be assigned to an lvalue; effectively, it moves a value from one lvalue to another, skipping a copy initializer call.
+Effectively, moving imples direct copying of the value data, skipping a copy initializer call.
 
 A moved lvalue itself shall not be used anymore, unless set again.
 Therefore, [underline]#only an explicitly declared# (e.g. with `stem:["let"]`) [underline]#local-scoped reference may be safely moved#.
-Otherwise, moving is unsafe.
+Otherwise, moving is unsafe, but possible.
 When moving safely, a compiler would panic if there is at least a possibility of using a moved lvalue, for example, when moving depends on runtime.
 
 A `stem:[l]~0~ ++<-++ stem:[l]~1~` expression is a syntactic sugar for `stem:[l]~0~ = ++<-++ stem:[l]~1~`.
@@ -715,6 +1123,12 @@ An indirect value is either a xref:_references[reference] or xref:_pointers[poin
 Indirect values share common semantics, such as xref:_scopes[scope], xref:_spaces[space], readability and writeability (commonly known as xref:_accessibility[]).
 
 === References
+
+TODO: A reference may be restricted to an rvalue; this would copy it, returning an rvalue.
+Thus, `let x : Std::List; x : Std::List` is OK, but copies.
+
+TODO: An rvalue is really a temporal reference, but for some reason it's moved instead of copying upon assignment, e.g. `let list = Std::List() |.shuffle()`.
+Assigning a temporal reference moves it?
 
 A reference type `Reference<Type: stem:[T], Scope: stem:[S], Space: stem:[P], Readable: stem:[R], Writeable: stem:[W]>` can be shorcut as `stem:[T]&stem:[SPRW]`, e.g. `SBin32&lrw0 == Reference<SBin32, :local, 0, true, true>`.
 For scope one-letter shortcuts, see xref:_scopes[].
@@ -794,12 +1208,60 @@ The Standard defines space mappings for common platforms.
 
 == Scopes
 
-Defined scopes are stem:[bb"t"]_emporal_, stem:[bb"l"]_ocal_, stem:[bb"c"]_aller_, stem:[bb"i"]_nstance_ and stem:[bb"s"]_tatic_.
-An indirect value may also have an stem:[bb"u"]ndefined scope.
+Defined scopes are [underline]#t#_emporal_, [underline]#l#_ocal_, [underline]#c#_aller_, [underline]#i#_nstance_ and [underline]#s#_tatic_.
+An indirect value may also have an [underline]#u#_ndefined_ scope.
+An underlined symbol defines the scope shortcut used in indirect value shortcuts, e.g. `stem:["T"]*l` has [underline]#l#++ocal++ scope.
 
-When passing an aggregate (i.e. non-scalar) value to an outer scope (i.e. returning or passing as an argument), each of its fields' scopes is checked and auto-cast separately.
-For example, returning an `Array<stem:[T]*l, stem:[N]>` would check each of its elements as it was an independent value; returning `stem:[T]*l` is not possible, thus the compiler would panic.
-On the other side, passing an `Array<stem:[T]*l>` as a `Array<stem:[T]*c>` is possible.
+When passing an aggregate (i.e. non-scalar) value to an outer scope (e.g. returning from a function or passing as an argument), each of its fields' scopes is checked and auto-cast (if applicable) separately.
+
+TIP: In Onyx, arrays, tuples and structs are very similar.
+It's their access semantic what's different.
+It can be said that an array elements accessed with `[]` are "fields" of the array with `[0]`, `[1]` etc. names.
+
+====
+In this example, an array of local pointers can be passed as an array of caller pointers.
+However, it shall not be returned.
+
+```nx
+def foo(ary : SBin32*cw[1])
+  ary[0]-> = 43
+end
+
+def main
+  let x = 42
+  let ary = [&x] : SBin32&lrw[1]
+
+  foo(ary) # OK, auto-casts the element's scope
+  @assert(x == 43)
+
+  # return ary # Panic! Can not return a local-scoped pointer
+end
+```
+
+This example is similar, but a custom struct is used instead of an array.
+
+```nx
+struct Wrapper
+  # Note how it points to an instance scope,
+  # i.e. to the one the object is in.
+  let wrapped : SBin32*irw
+end
+
+def foo
+  final x = 42
+
+  final wrapper = Wrapper(&x)
+  @assert(wrapper :? Wrapper&lrw)
+
+  *(wrapper.wrapped) = 43
+  @assert(x == 43)
+
+  # # Panics because `wrapped`
+  # # has instance, hence local, scope.
+  # return wrapped # Panic!
+end
+```
+====
 
 Similar rules are applied to a value existence.
 `stem:[T]*l&s` does not make sense, as there is no local scope in the static scope.
@@ -807,7 +1269,7 @@ That said, `Array<stem:[T]*l>&l` and `Array<stem:[T]*s>&l` are valid, but `Array
 
 Note that a non-indirect value does not have scope, it is pure data, which can be passed at any direction.
 
-A field of a pointer type with scope other than static or undefined shall not be declared.
+A field of a pointer type with scope other than instance, static or undefined shall not be declared.
 However, a generic-typed field may be specialized with another scope.
 For example:
 
@@ -815,24 +1277,25 @@ For example:
 ```nx
 struct Foo
   # # Does not make sense to
-  # # have local pointer here
-  # let ptr : SBin32*l&i
-end
-```
+  # # have local pointer here.
+  # let ptr : SBin32*l # Panic!
 
-```nx
-struct Foo<T>
-  let ptr : T # OK
+  let ptr : T
+
+  # # Could've used instance
+  # # pointer as an alternative.
+  # # See the `Wrapper` example above.
+  # let ptr : SBin32*i
 end
 
 final global_x = 42
 # TODO: Address space inference here?
 # Would likely put into `.global` on PTX.
-final global_foo = Foo<SBin32*srw>(&x) # OK
+final global_foo = Foo<SBin32*sr>(&x) # OK
 
 def bar
   final x = 42
-  final foo = Foo<SBin32*lrw>(&x) # OK
+  final foo = Foo<SBin32*lr>(&x) # OK
 
   # # As mentioned above, each field is checked independently;
   # # it is not possible to pass a local pointer outside, thus panicking.
@@ -843,111 +1306,134 @@ end
 
 === Scope casting
 
-An indirect value of one scope may be cast to another scope using the `as` operator in accordance to xref:scope-casting-table[].
+An indirect value of one scope may be cast to another scope using the `as` operator in accordance to xref:table-scope-casting[].
+For example, `(ptr : T*c) as T*l` is [green]#threadsafe#, but `(ptr : T*l) as T*c` is [red]#unsafe#.
 
-[[scope-casting-table]]
+// Undefined -> RW is okay.
+[[accessibility-casting-constraints]]
+Disabling or preserving an accessibility option is [green]#threadsafe# (e.g. making an `*rw` pointer `*r`-only), but enabling it back is [red]#unsafe# (e.g. casting a `&W` reference to `&rw`).
+
+Casting to undefined scope is [green]#threadsafe# with respect to the beforementioned accessibility casting (e.g. `(ptr : T*r) as T*rw` becomes [red]#unsafe#).
+Casting from undefined scope is always [red]#unsafe#.
+
+[[table-scope-casting]]
 .Scope casting
 [cols=7]
 |===
-.2+^.^s| Source scope
-6+^.^s| Safety of casting to target scope
+2+^s| Source
+5+^s| Safety of casting to target scope
+^s| Scope
+^s| Accessibility
+| Temporal | Local | Caller | Static | Undefined
 
-| Temporal | Local | Caller | Instance | Static | Undefined
-
-| Temporal
-| [green]#Threadsafe#
-4*| [red]#Unsafe#
-| [green]#Threadsafe#
-
-| Local
-| [green]#Threadsafe#
+2+| Temporal
 | [green]#Threadsafe#
 3*| [red]#Unsafe#
 | [green]#Threadsafe#
 
-| Caller
+2+| Local
+| [green]#Threadsafe#
+| [green]#Threadsafe#
+| [red]#Unsafe#
+| [red]#Unsafe#
+| [green]#Threadsafe#
+
+2+| Caller
 3*| [green]#Threadsafe#
 | [red]#Unsafe#
-| [red]#Unsafe#
 | [green]#Threadsafe#
 
-| Instance
+.2+.^| Static
+| Read-only and constant
+5*| [green]#Threadsafe#
+
+| Writeable or mutable
 | [green]#Threadsafe#
+| [yellow]#Fragile# conum:1[]
+| [yellow]#Fragile# conum:1[]
 | [green]#Threadsafe#
-| [red]#Unsafe#
-| [green]#Threadsafe#
-| [red]#Unsafe#
 | [green]#Threadsafe#
 
-| Static
-6*| [green]#Threadsafe#
-
-| Undefined
-5*| [red]#Unsafe#
+2+| Undefined
+4*| [red]#Unsafe#
 | [green]#Threadsafe#
 |===
 
-=== Argument autocasting
+<1> Because other threads may simultaneously write or mutate the value.
+
+=== Indirect value argument autocasting
 
 Only a pointer with caller, static or undefined scope may be declared as a function argument type.
+A reference shall not be declared a function argument type, because a reference to a reference is impossible.
 
-When a pointer is passed to a function, it may be automatically cast to the target argument scope with safety defined in xref:argument-pointer-scope-auocasting[].
-Otherwise, manual xref:_scope_casting[] is required.
+TIP: The `Scope` argument is a xref:TODO:[ghost generic] argument.
+`Pointer<Scope: Undef>` would therefore trigger a separate specialization.
 
-The resulting safety of a call is the lowest safety from the callee safety modifier (e.g. `unsafe def foo();`) and the autocasting safety of its arguments from the following table.
+When a pointer is passed to a function, it may be automatically cast to the target argument scope with safety defined in xref:pointer-argument-autocasting[].
+Otherwise, manual xref:_scope_casting[scope casting] is required.
+The resulting safety of a call is the lowest safety from the callee safety modifier and the autocasting safety of its arguments from the table, plus the xref:accessibility-casting-constraints[accessibility casting constraints].
 
-[[argument-pointer-scope-auocasting]]
-.Argument pointer scope autocasting
-[cols=4]
+[[pointer-argument-autocasting]]
+.Pointer argument autocasting
+[cols=5]
 |===
-.2+^.^s| Caller-side pointer scope
+2+^.^s| Caller-side pointer
 3+^.^s| Autocasting safety by a declared argument's scope
+^s| Scope
+^s| Accessibility
 | Caller
-| Static
+| Static conum:1[]
 | Undefined
 
-| Temporal
+2+| Temporal
 | [gray]#N/A#
 | [gray]#N/A#
 | [green]#Threadsafe#
 
-| Local
+2+| Local
 | [green]#Threadsafe#
 | [gray]#N/A#
 | [green]#Threadsafe#
 
-| Caller
+2+| Caller
 | [green]#Threadsafe#
 | [gray]#N/A#
 | [green]#Threadsafe#
 
-| Instance
-| Varies (see xref:_instance_scope[])
-| [gray]#N/A#
+.2+.^| Static
+| Read-only and constant
+3*| [green]#Threadsafe#
+
+| Writeable or mutable
+| [yellow]#Fragile# conum:2[]
+| [green]#Threadsafe#
 | [green]#Threadsafe#
 
-| Static
-| [yellow]#Fragile#
-| [green]#Threadsafe#
-| [green]#Threadsafe#
-
-| Undefined
+2+| Undefined
 | [red]#Unsafe#
 | [gray]#N/A#
 | [green]#Threadsafe#
 |===
 
-=== Returned scope autocasting
+<1> Manual cast to static scope is required prior to passing, see xref:table-scope-casting[].
+<2> Because other threads may simultaneously write or mutate the value.
 
-A pointer with local scope shall not be safely returned from a function.
-Other returned scopes are treated on the caller side in accordance to the following table.
+=== Returned indirect value scope autocasting
 
-[[returned-scope-casting]]
+Returning a reference implicitly moves it, thus making returning a reference impossible.
+
+Otherwise, a pointer with scope other than local may be returned from a function.
+Its scope is automatically cast at the caller side in accordance to xref:returned-pointer-scope-autocasting[].
+
+NOTE: An observer never sees raw instance scope.
+It always turns into the containing object's.
+
+[[returned-pointer-scope-autocasting]]
 .Returned pointer scope autocasting
 [cols=2]
 |===
-^.^s| Scope returned from callee
-^.^s| Caller-side resulting scope
+^.^s| Returned pointer scope
+^.^s| Caller-side resulting pointer scope
 
 | Temporal
 | Temporal
@@ -957,9 +1443,6 @@ Other returned scopes are treated on the caller side in accordance to the follow
 
 | Caller
 | Local (see xref:_caller_scope[])
-
-| Instance
-| Varies (see xref:_instance_scope[])
 
 | Static
 | Static
@@ -1074,42 +1557,139 @@ There is no way to declare a caller-scoped reference other than dereference a ca
 
 === Instance scope
 
-TIP: The _field_ term is a shortcut for "a reference declared under an object type declaration with `stem:["instance"]` scope modifier"; ditto for _method_, which is a function declaration.
+Instance scope is guaranteed to span at least to the containing object's lifetime.
 
-Instance scope spans to the object's lifetime, thus applicable to field declarations only, and may be also used within methods.
-A reference declared with `stem:["instance"]` scope modifier, which is implicit default for fields, always has instance scope.
+field::
++
+A _field_ is a reference declared with an `stem:[bb"instance"]` scope modifier, which is the default and only applicable for a reference declaration within a data type definition.
+A reference declaration within a data type definition may also be declared with a xref:_static_scope[`stem:[bb"static"]` scope] modifier.
+In that case, it would not be a field anymore, but simply a static reference.
 
-NOTE: Within an object declaration, a reference may also be declared with an explicit `stem:["static"]` scope modifier.
+An instance-scoped indirect value type is only used either within a field declaration, e.g. `instance let ptr : T*i`.
+For an observer, an instance scope translates to the containing object's scope.
+Therefore, accessing an object's field returns a reference with the same scope as the object's.
+Consequently, casting to and from instance scope is absent from xref:table-scope-casting[].
+
+====
+```nx
+struct Point
+  # `instance val` is implied.
+  val x : FBin64
+
+  # Return a pointer to `x`.
+  #
+  # The declaration has return type inferred;
+  # the returned scope would equal to `this`'.
+  #
+  # NOTE: `&this*` is a syntactic
+  # sugar for `&this : self*`.
+  #
+  # NOTE:The function is always threadsafe,
+  # because there is no actual reference access.
+  def get_x_ptr(&this*)
+    return &(this.x)
+  end
+
+  # # NOTE: A more wordy, but similar implementation.
+  # # NOTE: Could've used `S, R, W, P` instead of `T`.
+  # def get_x_ptr(
+  #   &this : Pointer<self, *T>
+  # ) : Pointer<FBin64, *T> forall T
+  #   return &(this.x)
+  # end
+end
+
+# A static point.
+final sp = Point(42)
+
+@[Std::Entry]
+export void main() {
+  # Note the static scope
+  sp.x : FBin64&sr
+  sp:get_x_ptr() : FBin64*sr
+
+  # A local point
+  final lp = Point(43)
+
+  # Note the local scope
+  lp.x : FBin64&lr
+  lp:get_x_ptr() : FBin64*lr
+}
+```
+
+```nx
+struct Wrapper
+  # Using an instance-scoped indirect
+  # value as a field type restriction.
+  val ptr : FBin64*irw
+
+  # # This is implied.
+  # impl initialize(&this*crw, ptr : FBin64*crw)
+  #   this.ptr = ptr
+  # end
+end
+
+@[Std::Entry]
+export void main() {
+  static final x = 0f64
+
+  # Onyx does not support non-trivial
+  # initializers within static context
+  static final w = unsafe! uninitialized Wrapper
+
+  # `initialize` is special in terms that it safely
+  # casts `this : self&r` to `this : self&rw`.
+  # But static to caller casting is still fragile.
+  fragile! w:initialize(&x)
+
+  w.ptr : FBin64*srw&sr # `ptr`'s scope becomes static
+}
+```
+====
 
 When returned from a method, an instance-scoped pointer scope is cast to the object's scope, from the perspective of the caller.
 An instance-scoped pointer shall not be safely cast to any other scope other than undefined, because it would eliminate the "cast to object's scope" feature.
 
 It is possible to safely pass an instance-scoped pointer as a caller-scoped pointer argument.
 
-A field's referenced type shall not be declared an instance-scoped pointer, because we don't know the scope the object would be put in, thus can not reliably determine the pointer size.
+A field's type may be declared an instance-scoped pointer.
+The pointer shall then have the same scope as the containing object.
 
 ====
 ```nx
-struct Point
-  let x : FBin64&i # Implicit `instance` scope for a struct's field
+struct Wrapper
+  let a : FBin64
 
-  # let ptr : SBin32*i&i # Panic! Can not have instance-scoped
-                         # pointer as a field's type
-
-  def get_x : FBin64*irw
-    x : FBin64&irw # This is an instance-scoped reference
+  def get_a() : FBin64*irw
+    a : FBin64&irw # This is an instance-scoped reference
 
     # Again, returning a reference would turn it
     # into an rvalue, which is not what we want.
-    return &x : FBin64*irw
+    return &a : FBin64*irw
+  end
+
+  # An instance-scoped pointer expands
+  # to the containing object's scope.
+  let b : SBin32*irw
+
+  def double_b()
+    # It is still instance-scoped here.
+    *(b : SBin32*irw) *= 2
   end
 end
 
-final p = Point(42)
+let b = 42
+
+# `w` has local scope, thus its `b`
+# becomes `SBin32*lrw` for the observer.
+final w = Wrapper(a: 17, b: &b)
 
 # An instance pointer becomes a local
 # pointer, inherited from `p`'s scope
-final x : FBin64*lrw&lr = p.get_x : FBin64*lrw
+final a : FBin64*lrw = w.get_a() : FBin64*lrw
+
+w.double_b()
+@assert(b == 84)
 ```
 
 TIP: TIP: Only local-scoped *references* are finalized, and `x` is a local-scoped *pointer*.
@@ -1170,27 +1750,148 @@ They can not be overloaded, but can be used as binary operators, e.g. `(x is? T)
 
 TODO: `{% if nx.ctx.impl.recv then %}`.
 
+[[trivial-function]]
+.Trivial functions
+A trivial function is one not calling any runtime code when inlined, but may only be doing some reference assignments.
+An example of a trivial function is the default initializer for structs, or primitive initializers such as numbers.
+
 === Function declarations
 
-Function declarations are type-first.
-For example, in `decl foo(T)` the first argument is anonymous of type `T`, which is equivalent to `decl foo([0]: T)`.
+Function declarations are threadsafe by default.
 
-An explicit argument name or index may be provided, e.g. `decl foo([0]: x, y: T)`.
-After an explicit name, only explicit names are allowed.
-There shall not be gaps in indices, e.g. `decl foo([1]: T)` is invalid.
+=== Methods new
 
-An argument type may be omitted, but it would require its explicit name or index, e.g. `decl foo([0]:)`.
+A function member declared within a data type with `instance` scope (which is the implicit default one) is called a _method_.
 
+A method may be called on an object using the `obj.method(args)` syntax.
+Note that as any other function call, a method call requires parentheses even with zero arity.
+
+Within a method, a special `this` reference is available.
+
+If the containing type is a value type, then `this` is a read-only copy of the caller, i.e. `this : self&lr`.
+
+Otherwise, if the containing type is a reference type, then `this` is a read-only reference to the caller, i.e. `this : mut<self>&cr` or `this : const<self>&cr`.
+The mutability of `this` in a reference type method is controlled with a method mutability modifier, e.g. `mut decl foo()`.
+Read more about mutability in xref:_classes[].
+
+A static function may also be called on a type using the same methods-call syntax, e.g. `(obj : T)::func()` stem:[-=] `T::func()` stem:[-=] `T.func()`.
+Nothing is implicitly passed to such a call.
+This behaviour is also applicable to the static field access syntax, e.g. `obj::ref` stem:[-=] `T::ref` stem:[-=] `T.ref`.
+
+=== Methods
+
+method::
+A function member declared in a data type accepting an instance of the type (or a pointer to an instance of the type if the type is a by-ref type) as the first anonymous argument. Also see https://en.wikipedia.org/wiki/Uniform_Function_Call_Syntax[UFCS].
+
+A function declared with an `instance` scope modifier, which is the implicit default for a function declaration within a data type declaration, is similar to a function declared with a `static` scope modifier with the very first argument declared as `this : self` or `&this : self*cr`, based on the type kind.
+
+For example, `decl foo()` in a struct declaration would be similar to `static decl foo(this : self)`.
+
+Consequently, `this : self&lr` or `this : self&cr` is implicitly defined within a function declared with an `instance` scope modifier, referring to the implicit argument declaration.
+
+TIP: If you want to have a custom-scoped or custom-acessible `this`, consider declaring a statically-scoped function with the argument restriction you need.
+
+An identifier lookup within such a function adds `this.` after the local scope lookup.
+For example, if `x` is not found in the local scope, it is then attempted to be qualified as `this.x`.
+Note that a local identifier can shadow an instance reference.
+
+A method is declared using one of the following semantics:
+
+[subs=+quotes]
+```nx
+struct T [silver]### Or \`class T`##
+  decl method(args) [silver]### \`instance decl` is implied##
+  static decl method(this : self, args) # <1> <2>
+end
+
+decl T:method(args)
+decl T::method(this : T, args) # <1> <2>
+```
+
+<1> To qualify as a method, only the type of the first argument matters.
+Therefore, it may be named other than `this`.
+<2> `this : T` shall be changed to `this : T*cr` for a by-ref type to qualify as a method.
+
+A method may be called on an object using one of the following semantics:
+
+[subs=+quotes]
+```nx
+obj.method(args)
+obj::method(obj, args) [silver]### Or \`(&obj, args)` if called on a by-ref type##
+T::method(obj, args)   [silver]### Ditto##
+```
+
+As any other function call, a method call requires parentheses even with zero arity.
+
+.By-val type methods
 ====
 ```nx
-# Invalid
-decl foo(x: T, U)
-decl foo(x: T, [0]: U)
+struct Point
+  val x, y : FBin64
 
-# Valid
-decl foo(T, x: T)
-decl foo(x: T, y: U)
-decl foo([0]: T)
+  def append(another : self)
+    return self(
+      # `this` is implicitly declared in a method,
+      # referring to the instance copy.
+      x: ((this : self&lr).x : FBin64&lr) + another.x,
+
+      # An identifier lookup starts from `this.`.
+      y: y + another.y)
+  end
+
+  # # Could've been declared as a static function instead.
+  # static threadsafe def append(that : self, another : self) : self
+  #   return self(that.x + another.x, that.y + another.y)
+  # end
+end
+
+def main
+  final p = Point(1, 2)
+  @assert(p.length() ~= 2.24)
+  # @assert(p::length(p) ~= 2.24)     # Ditto
+  # @assert(Point::length(p) ~= 2.24) # Ditto
+end
+```
+====
+
+Class methods have `this.field` syntactic sugar for an argument declaration, which expands to the field assignment.
+For example, `impl Foo::initialize(this.x);` sets `x` to `42` upon calling `Foo(42)` before executing the function body.
+
+.By-ref type methods
+====
+```nx
+class Foo
+  let x : SBin32
+
+  # An initializer implementation
+  # is required for a class.
+  impl initialize(this.x);
+
+  # `mut` defines mutability of `this`.
+  mut def double_x()
+    # Ditto for lookup.
+    #
+    # Note how `.x` it returns a writeable
+    # reference even if `this` is read-only.
+    # This behaviour is related to mutability.
+    (x : SBin32&crw) += (this : self&cr).x
+  end
+
+  # # Could've been implemented as a static function instead.
+  # static threadsafe def double_x(&this : mut<self>*cr) : SBin32
+  #   return this.x *= 2
+  # end
+end
+
+def main
+  final f = mut Foo(42)
+
+  f.double_x()
+  # f::double_x(&f)   # Ditto
+  # Foo::double_x(&f) # Ditto
+
+  @assert(f.x == 84)
+end
 ```
 ====
 
@@ -1218,52 +1919,76 @@ foo(unsafe! x.as(SInt32&w))
 
 == Types
 
-.Type kinds
 Types are namespaces, traits, units, structs, classes, enums and annotations.
-This classification is known as a _type kind_.
+The classification is known as a _type kind_.
 Structs, classes and enums are known as _data types_; their instances, called _objects_, may exist in runtime.
 
-.Generic types
-A _generic type_ contains at least one generic argument.
+=== Type instances
 
-.Type references
-A _type reference_ is a reference of a type identifier with or without generic arguments from the source or macro code.
+A _type instance_ is an instance of a type itself, e.g. `let x : \SInt32 : Type<SInt32> = SInt32`.
 
-.Type instances
-A _type instance_ is an instance of a type, e.g. `let x : \SInt32 : Type<SInt32> = SInt32`.
-It may be used in runtime, compared to other types, called its static methods on, has its static fields accessed, and used as a generic argument.
-A `Type` instance itself does not carry any type information in runtime.
+A type instance may be used in runtime, have its static members accessed (including initialization and comparison to other types), and even used as a generic argument.
+
+A type instance by itself does not carry any type information in runtime.
 
 .Type instances
 ====
-```nx
-let x = SInt32
 
-@assert(x<Bitsize> == 32)
-@assert(x(42) == 42i32)
+.A freestanding type instance
+```nx
+let x = SBin32
+
+@assert(@typeof(x) == \SBin32)
+@assert(@sizeof(x) == 0)
+
+@assert(x == SBin32)      # Calling a static function `::==(another_type)`
+@assert(x<Bitsize> == 32) # Accessing a generic argument
+@assert(x(42) == 42i32)   # Calling a static function `::()`
+@assert(x::Max == 2147483647i32) # Accessing a static reference
 
 # def foo(x : \T) forall T ~ SInt;
 def foo(x ~ \SInt);
 
-foo(x) # OK, eq. to `foo(SInt32)`
+foo(x) # OK, equivalent to `foo(SBin32)`
 ```
 
-.Variants of type instances
+.A variant of type instances
 ```nx
-let x = Std@rand(SInt32, FBin64)
-x : Variant<\SInt32, \FBin64>
+let x = Std@rand(SBin32, FBin64)
+x : <\SBin32, \FBin64>?&lrw
 
-# `is?` is called on the actual variant option
-if x :? \SInt32
-  @assert(x(42) == 42i32)
-  Std.puts("`x` is `Type<SInt32>`")
-else
-  Std.puts("`x` is `Type<FBin64>`")
+if x is? \SBin32
+  @assert((x as SBin32)(42) == 42i32)
 end
 ```
 ====
 
+=== Literal instances
+
+A type instance may be a literal instance.
+A literal instance has basic arithmetic functions and can be used both as a generic and runtime argument.
+
+A literal instance has type `Literal<stem:[L]>`, where `stem:[L]` is a literal constrainment from xref:table-literal-constrainments[].
+
 === Generic types
+
+Data type::
+A struct, class or a enum type.
+
+Object::
+An instance of a data type, existing in runtime.
+
+By-val type::
+A struct or a enum type.
+
+By-ref type::
+A class or `Lambda` type.
+
+Generic type::
+A type containing at least one generic argument.
+
+Type reference::
+A reference to a type with or without generic arguments from the source or macro code, e.g. `SBin<32>` or `Std`.
 
 A generic type is a type containing at least one generic argument.
 A generic argument may be used within the type.
@@ -1610,15 +2335,264 @@ But if it is used as an argument declaration type annotation, (a) it leads to sp
 DRAFT: When a type is fuzzy-restricted, you can not query its real type?
 So this is orthogonal to a concrete type restriction.
 
-=== Namespaces
+== Namespaces
 
 A namespace type may only contain static functions and values.
 
-=== Units
+== Data types
 
-A unit type is a singleton, it only has one global runtime instance.
-A unit type occupies zero space.
-Initialization of a unit type returns itself (not a copy).
+A data type defines meaning of a runtime value.
+It may be a user-defined or anonymous struct, class or enum, or a primitive such as an array, tuple, vector, scalar number etc.
+Namespace and trait types are not data types.
+
+=== Structs
+
+A struct is a user-defined named container of named xref:_references[references].
+
+A struct is defined using the `struct` keyword, e.g. `struct Foo`.
+See xref:_entities[] for more info about defining entities.
+
+As any other type declaration, a struct allows static member declarations.
+Static reference and function member declarations within a struct require an explicit `static` scope modifier.
+
+Instance-scoped references, i.e. fields, in a struct are defined using the `val` statement, e.g. `val x : FBin64`.
+A `val` statement does not have a scope.
+xref:_accessibility[Accessibility] of a field depends on the containing struct's.
+For example, if `strukt` is read-only, then `strukt.x` would also be read-only.
+A `val` statement is not allowed to have a default value clause.
+
+TIP: The `val` keyword is chosen over `let` to reflect the dependant accessibility nature, whereas `let` implies always being both readable and writeable.
+Otherwise, `val` has semantics similar to `let`.
+
+A function declared within a struct with the implicit default `instance` scope modifier becomes a method with a `this : self&lr` local constant available within the body representing a copy of the caller.
+Consequently, qualification of identifiers within a method's body implies the `this.*` lookup.
+Read more in xref:_methods[].
+
+A struct type implements a default trivial initializer accepting field values in the order of declaration.
+// , with those being optional which have a default value set.
+// Note, however, that a function declaration disallows optional arguments to precede non-optional ones; thus, references with default values should be declared later.
+
+====
+```nx
+# `complete public def struct Point` is implied.
+struct Point
+  val x, y : FBin64
+
+  # `instance public def length()` is implied.
+  def length
+    (x ** 2 + this.y ** 2).sqrt()
+  end
+
+  # Use a static function to implement
+  # a custom initialization logic.
+  static def zero
+    self(0, 0)
+  end
+end
+
+def main
+  # A basic literal initialization
+  final p1 = Point{ 1, 2 }
+  @assert(p1.length() ~= 2.23)
+
+  # A static function call
+  final p2 = Point::zero()
+  @assert(p2.length() == 0)
+
+  # Using of an uninitialized instance
+  final p3 = unsafe! uninitialized Point
+  p3.x = 1
+  # p3.length() # UB
+end
+```
+====
+
+A struct type does not declare a `finalize` method.
+But it still has lifetime and finalizes its fields in the order of declaration once it dies.
+
+IMPORTANT: Even if a `finalize` method is declared in a struct, it won't be called automatically.
+
+Once a struct is implemented with a `complete` completeness modifier (which is the default implicit one), it can not have new fields declaration.
+But it may be further xref:_reopening[reopened] to have new methods declared.
+A struct implemented with an explicit `incomplete` completeness modifier can not be initialized, but allows further reopenings to declare new fields.
+
+A struct declared with an `abstract` modifier shall never be directly initialized.
+Further reopenings of the struct shall also include the `abstract` modifier.
+
+A struct has undefined ordering of elements in memory unless annotated with `@[Ordered]`.
+It also has undefined alignment unless annotated with `@[Aligned]`.
+A struct may be packed by applying the `@[Packed]` annotation.
+
+// TODO: Extending multiple structs? How to solve conflicts then?
+A struct may extend another struct at most once.
+Only a (currently) complete struct may be extended.
+An extending struct default initializer contains all the fields in the order of declaration.
+Memory boundaries of an extended struct are guaranteed to precede the extending's.
+Therefore, an extending struct may be thread-safely coerced into the extended one.
+Extending a struct does not inherit its static members.
+
+====
+```nx
+abstract struct Parent
+  # The ordering of `a` and `b` is undefined.
+  # For example, `b` may actually precede `a`.
+  val a : SBin32
+  val b : FBin64
+
+  def sum
+    a.to_f64() + b
+  end
+
+  static def noop;
+end
+
+# `<` is a shortcut for `extend Parent;`
+struct Child < Parent
+  # The ordering of `c` and `d` is also undefined.
+  # However, `a` and `b` are guaranteed to precede `c` and `d`.
+  val c, d : UBin16
+
+  reimpl sum
+    Parent::noop() # Static members are not inherited
+    super() + c.to_f64() + d.to_f64()
+  end
+
+  # # Would not trigger name collision.
+  # static def noop;
+end
+
+def main
+  # Child::noop() # Panic! `Child::noop()` is not declared
+
+  # Note the augmented default initializer
+  final c = Child(1i32, 2f64, 3u16, 4u16)
+  @assert(c.sum() == 10)
+  @assert(c~Parent.sum() == 3)
+
+  # This is a threadsafe operation
+  final p = c as Parent
+
+  # Note that `Parent` is `abstract`, but it
+  # still can be "initialized" indirectly
+  @assert(p.sum() == 3)
+end
+```
+====
+
+=== Classes
+
+Class semantics is the way to do object-oriented programming in Onyx.
+A class implies incapsulation and resource control.
+
+A class type does not have a literal initializer defined.
+Instead, it may have multiple `initialize` method declarations which are delegated to upon a `Klass()` call.
+All fields without default values shall be initialized in every `initialize` method implementation.
+Despite of a defined `initialize` method safety, a `Klass()` call is always threadsafe.
+
+A class type may have its fields declared using the familiar `let` and `final` statements, as well as class-specific `get` and `set` statements.
+The latter two only allow certain accessibility from the observer's point of view, but the field is fully accessible from the class itself.
+Class field declarations allow default values and visibility modifiers.
+A `final` field declaration shall not be changed after set in an `initialize` method, or to its default value.
+// A field declaration shall have its size known at the moment of declaration? But what about generics and delayed types?
+
+Class method declarations allow special `this.field` argument declaration syntax, which is a syntactic sugar for accepting and rewriting a field value in the very beginning of the method's body.
+
+By default, class field and method declarations have an implicit `private` visibility modifier.
+
+A class instance has lifetime and it finalizes all its fields upon death, in the order of declaration.
+An explicit `finalize()` method may be defined, which would be called prior to finalizing them fields.
+Despite of the defined `finalize()` method safety, an implicit finalization of a class instance is always threadsafe.
+
+TODO: Mutability.
+TODO: Traits.
+
+====
+```nx
+mut class Car
+  # A publicly-visible variable field.
+  public let acceleration : FBin64
+
+  # A publicly-visible field which shall not
+  # be changed after set in an `initialize` method.
+  # Note that it does not have a default value,
+  # thus shall be set in every `initialize` method.
+  public final max_speed : FBin64
+
+  # This field may only be read from the
+  # outside, i.e. `car.velocity : FBin64&r`,
+  # but it's fully accessible from the
+  # inside, i.e. `this.velocity : FBin64&crw`.
+  #
+  # TODO: The declaration type restriction is implicitly
+  # `: Infer`, which immediately expands to `: FBin64`.
+  public get velocity = 0f64
+
+  # This variable is only visible within the class itself.
+  let resources : $void*
+
+  # This is marked unsafe to avoid duplicate resource acquisition.
+  public unsafe def initialize(this.max_speed, acceleration = 0)
+    threadsafe!
+      this.acceleration = acceleration
+      resources = unsafe! $malloc(100)
+    end
+  end
+
+  # A public function to update the car's
+  # velocity based on its acceleration.
+  public def update(time_passed: `Δ)
+    velocity = (velocity + acceleration * `Δ).max(max_speed)
+  end
+
+  # Ditto for duplicate resource deallocation.
+  # Note that this definiton is private so we
+  # don't accidentaly manually call it.
+  unsafe def finalize
+    $free(resources)
+  end
+end
+
+def main
+  final car = Car(100)
+  car.acceleration = 10
+  car.update(time_passed: 3)
+  @assert(car.velocity == 30)
+end
+```
+====
+
+=== Enums
+
+A enum type is a collection of named integer values.
+
+By default, an underlying type of a enum is `SInt32`, but it can be changed explicitly, e.g. `enum Foo : UInt16`.
+Only a `Int` type may be a enum underlying type.
+
+The very first defined enum value has an implicit underlying value of zero.
+Each enum value defined is implicitly incremented by one from the previous defined value.
+A enum value definition may have an explicit underlying value assigned, e.g. `val Foo = 3`.
+
+[TIP]
+--
+For Rust-like enums, create a distinct alias for a Variant.
+
+.Rust-like enums
+====
+```nx
+distinct alias MyRustEnum = Variant<SInt32, Vector<FBin64, 2>>
+  def product : SInt32 || FBin64
+    if this.is?(SInt32)
+      return this.as!(SInt32)
+    else
+      return this.as!((FBin64)x2).product()
+    end
+  end
+end
+```
+====
+--
+
+== Built-in types
 
 === Variants
 
@@ -1709,38 +2683,35 @@ export struct var_t get_variant() {
 ```
 ====
 
-=== Data types
+== Lifetime
 
-==== Enum
+TODO: A structure is finalized on the containing scope side.
+If a class has a `finalize()` method definition, it is called prior to finalizing its fields.
+The `NoFinalize` annotation may be unafely applied to a reference to skip finalization at the end of the reference's lifetime.
 
-A enum type is a collection of named integer values.
-
-By default, an underlying type of a enum is `SInt32`, but it can be changed explicitly, e.g. `enum Foo : UInt16`.
-Only a `Int` type may be a enum underlying type.
-
-The very first defined enum value has an implicit underlying value of zero.
-Each enum value defined is implicitly incremented by one from the previous defined value.
-A enum value definition may have an explicit underlying value assigned, e.g. `val Foo = 3`.
-
-[TIP]
---
-For Rust-like enums, create a distinct alias for a Variant.
-
-.Rust-like enums
-====
 ```nx
-distinct alias MyRustEnum = Variant<SInt32, Vector<FBin64, 2>>
-  def product : SInt32 || FBin64
-    if this.is?(SInt32)
-      return this.as!(SInt32)
-    else
-      return this.as!((FBin64)x2).product()
-    end
+# If want to move just an
+# element of a structure
+#
+
+@[unsafe! NoFinalize]
+final ary = [1, 2, 3]
+
+final x = @rand(2)
+final moved <- ary[x]
+
+ary.each -> |e, i|
+  if i != x
+    @finalize(e)
   end
 end
+
+return moved
 ```
-====
---
+
+TODO: Only identified references with local scope are finalized.
+For example, in `let e = &ary[0]`, `*e : T&lrw` is not an identified reference.
+Should think better on the naming: `let x = 42`, `x` is an identified reference, i.e. has memory in the current scope.
 
 == Piping
 

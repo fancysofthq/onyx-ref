@@ -1,11 +1,16 @@
-# Fucking bullshit.
-# The worst code I've ever read.
+# Asciidoctor backend code is the worst
+# of all open-source projects I've seen.
+# Still, it is extremely useful.
+#
 
-# Changed `convert_document` to remove `"code"`
+# My changes include:
+#
+# * Changed `convert_document` to remove `"code"`
 # from ASCIIMath's `skipTags` settings.
-
-# Changed `convert_table` so it
+#
+# * Changed `convert_table` so it
 # renders link in the table caption.
+#
 
 class HTML5Converter < (Asciidoctor::Converter.for 'html5')
   register_for 'html5'
@@ -66,7 +71,7 @@ class HTML5Converter < (Asciidoctor::Converter.for 'html5')
 
     if node.attr? 'icons', 'font'
       if node.attr? 'iconfont-remote'
-        result << %(<link rel="stylesheet" href="#{node.attr 'iconfont-cdn', %[#{cdn_base_url}/font-awesome/#{FONT_AWESOME_VERSION}/css/font-awesome.min.css]}"#{slash}>)
+        result << %(<link rel="stylesheet" href="#{node.attr 'iconfont-cdn', %[#{cdn_base_url}/font-awesome/#{Asciidoctor::FONT_AWESOME_VERSION}/css/font-awesome.min.css]}"#{slash}>)
       else
         iconfont_stylesheet = %(#{node.attr 'iconfont-name', 'font-awesome'}.css)
         result << %(<link rel="stylesheet" href="#{node.normalize_web_path iconfont_stylesheet, (node.attr 'stylesdir', ''), false}"#{slash}>)

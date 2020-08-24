@@ -483,7 +483,13 @@ body.book #toc,body.book #preamble,body.book h1.sect0,body.book .sect1>h2{page-b
 <ul class="sectlevel2">
 <li><a href="#_c_data_types">9.1. C data types</a></li>
 <li><a href="#_c_variables">9.2. C variables</a></li>
-<li><a href="#_c_macros">9.3. C macros</a></li>
+<li><a href="#_c_macros">9.3. C macros</a>
+<ul class="sectlevel3">
+<li><a href="#_c_numeric_constants">9.3.1. C numeric constants</a></li>
+<li><a href="#_c_text_constants">9.3.2. C text constants</a></li>
+<li><a href="#_other_c_macros">9.3.3. Other C macros</a></li>
+</ul>
+</li>
 <li><a href="#_external_declarations">9.4. External declarations</a></li>
 </ul>
 </li>
@@ -1465,20 +1471,20 @@ In regard to Onyx as well.</p>
 <div class="exampleblock">
 <div class="title">Example 1. Exporting a C variable</div>
 <div class="content">
-<div class="paragraph">
-<p>import "stdlib.h"</p>
-</div>
-<div class="paragraph">
-<p>extern int foo;</p>
-</div>
-<div class="paragraph">
-<p>export void main() {
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-nx" data-lang="nx">import "stdlib.h"
+
+extern int foo;
+
+export void main() {
   try
     @assert($foo : $int&amp;srw == 0)
   catch
     unsafe! $exit($(EXIT_FAILURE))
   end
-}</p>
+}</code></pre>
+</div>
 </div>
 </div>
 </div>
@@ -1489,13 +1495,251 @@ In regard to Onyx as well.</p>
 <p>C preprocessor macros may also be imported and exported.</p>
 </div>
 <div class="paragraph">
-<p>A C macro within Onyx context is used as follows: <code>$(MACRO)</code>.
-The evaluation result of a macro is inserted into Onyx with prior processing.</p>
+<p>A C macro within Onyx context is used as follows: <code>${MACRO}</code>.
+The evaluation result of a macro is inserted into Onyx after some pre-processing defined below.
+Nested macros are processed in C, and only the final result is pre-processed by Onyx.</p>
+</div>
+<div class="paragraph">
+<p>Appending an Onyx suffix is legal, e.g. with <code>MACRO</code><sub>c</sub> evaluating to <code>42</code>, <code>${MACRO}i64</code> would result in <code>42i64</code>.</p>
+</div>
+<div class="paragraph">
+<p>A C macro is not evaluated within a comment.
+If you really need that, emit a comment from an Onyx macro, and make use of a C macro within the Onyx macro, for example:</p>
+</div>
+<div class="exampleblock">
+<div class="content">
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-nx" data-lang="nx"># Note: a C macro is terminated with a newline,
+# therefore you should not use inline comments
+# for documenting exported C macros.
+export #define MACRO 42
+
+# ${MACRO} is not evaluated here.
+
+{{
+  "# " .. nx.c.lkp("MACRO"):evaluate() ..
+  " is evaluated here."
+}}</code></pre>
+</div>
+</div>
+</div>
 </div>
 <div class="paragraph">
 <p>Within an exporting context, C macros may intuitively be used as they&#8217;d be in pure C.
 For example, <code>export MY_MACRO_VOID main() {</code> could theoretically expand to <code>export void main() {</code>.
 The resulting code is then parsed as usual.</p>
+</div>
+<div class="admonitionblock tip">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-tip" title="Tip"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p>Fundamentally, a C macro evaluation result may be not cross-platform in terms of C.</p>
+</div>
+<div class="paragraph">
+<p>For example, the <code>4294967296ul</code><sub>c</sub> constant is too large for a target where <code>unsigned long</code> is 32 bits, limited to <code>4294967295</code>.
+This would therefore result in a panic on <strong>some</strong> platforms.</p>
+</div>
+<div class="paragraph">
+<p>But what really matters in crossing the C-Onyx boundary is a C constant&#8217;s contents.</p>
+</div>
+<div class="paragraph">
+<p>For instance, <code>l</code> and <code>ll</code> suffixes are ignored in Onyx.
+What Onyx sees after the C macro evaluation is <code>4294967296u</code>, and you shall explicitly constrain a macro evaluation result to the bitsize you want, with 32 being the reasonable default.
+For example, with <code>${BIG}u64</code> evaluating to <code>4294967296uu64</code> the code would be valid and cross-platform.</p>
+</div>
+<div class="paragraph">
+<p>TODO: Shall think more on <code>ll</code> suffixes and that cross-platform stuff.</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div class="sect3">
+<h4 id="_c_numeric_constants"><a class="link" href="#_c_numeric_constants">9.3.1. C numeric constants</a></h4>
+<div class="paragraph">
+<p>If a C macro evaluated to a numerical constant without any suffixes, the following rules apply:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Octal constants (those beginning with zero) are converted to the <code>0o</code><sub>nx</sub> notation.
+For example, <code>052</code><sub>c</sub> becomes <code>0o52</code><sub>nx</sub>.</p>
+</li>
+<li>
+<p>Hexadecimal constants are converted into the canonical Onyx notation, where <code>x</code> is always in lower case and hex decimals are in upper case.
+For example, <code>0X2a</code><sub>c</sub> becomes <code>0x2A</code><sub>nx</sub>.</p>
+</li>
+<li>
+<p>Floating-point constants beginning or ending with a dot get the missing leading or trailing zero inserted.
+For example, <code>.1</code><sub>c</sub> becomes <code>0.1</code><sub>nx</sub>, and <code>1.</code><sub>c</sub> becomes <code>1.0</code><sub>nx</sub>.</p>
+</li>
+<li>
+<p>Exponent symbols in floating-point constants are converted to their lower-case counterparts.
+For example, <code>1E3</code><sub>c</sub> becomes <code>1e3</code><sub>nx</sub>, and <code>0XAbP2</code><sub>c</sub> becomes <code>0xABp2</code>.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>An Onyx integer literal is constrained to <code>SBin32</code> by default.
+Therefore, if a C integer constant does not fit into 32 bits, a compiler would panic.
+To fix that, manually constrain a C macro evaluation result.
+For example, with <code>export #define MACRO 2147483648</code>, <code>${MACRO}</code> would result in <code>2147483648</code>, which would panic.
+Using a suffix would fix that: <code>${MACRO}i64</code> evaluates to <code>2147483648i64</code>, which is legal.</p>
+</div>
+<div class="paragraph">
+<p>Appending a <code>u</code> suffix to a C constant macro results in <code>u</code> suffix also appended in Onyx.
+For example, <code>export #define N 42U</code>, <code>${N}</code> becomes <code>42u</code>.</p>
+</div>
+<div class="paragraph">
+<p>Appending a <code>l</code> or <code>ll</code> suffix to a C constant macro is ignored.
+You should still constrain the result to the type you want, with <code>SBin32</code> or <code>UBin32</code> being the implicit defaults.
+For example, <code>export #define BIG 8589934592ull</code>, <code>${BIG}</code> would result in <code>8589934592u</code>, which does not actually fit into 32 bits, thus panics.
+<code>${BIG}u64</code> would result in <code>8589934592uu64</code>, which is a valid Onyx literal.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_c_text_constants"><a class="link" href="#_c_text_constants">9.3.2. C text constants</a></h4>
+<div class="paragraph">
+<p>A single-byte or <code>u8</code>-prefixed integer character constant is left as-is.
+For example, <code>'f'</code><sub>c</sub> and <code>u8&#8217;f'</code><sub>c</sub> both result in <code>'f'</code><sub>nx</sub>.</p>
+</div>
+<div class="paragraph">
+<p>Octal character codepoints are converted to such in Onyx, for example <code>'\141'</code><sub>c</sub> becomes <code>'\o141'</code><sub>nx</sub>.</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+The <code>\141</code><sub>nx</sub> notation in Onyx means decimal ordinal 141.
+Therefore, <code>'\97' == 'a'</code><sub>nx</sub>.
+</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>A hexadecimal sequence character constant becomes a hexadecimal codepoint character literal in Onyx notation.
+For example, <code>'\xaB'</code><sub>c</sub> becomes <code>'\xAB'</code><sub>nx</sub>.</p>
+</div>
+<div class="paragraph">
+<p><a href="https://en.cppreference.com/w/c/language/escape">C escape sequences</a> are a subset of those in Onyx, therefore they are left as-is.</p>
+</div>
+<div class="paragraph">
+<p>Multi-codepoint C constants are disallowed, because in Onyx a single character shall contain exactly one codepoint. Also C18§6.4.4.4.10:</p>
+</div>
+<div class="quoteblock">
+<blockquote>
+<div class="paragraph">
+<p>The value of an integer character constant containing more than one character (e.g., <code>'ab'</code>), <em>[&#8230;&#8203;]</em> is implementation-defined.</p>
+</div>
+</blockquote>
+</div>
+<div class="paragraph">
+<p>Multi-byte character C constants, i.e. those prefixed with <code>u</code>, <code>U</code> and <code>L</code>, result in the same single codepoint Onyx character literal.
+Note that if a constant codepoint is out of range defined by C environment, the compiler would panic.</p>
+</div>
+<div class="admonitionblock tip">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-tip" title="Tip"></i>
+</td>
+<td class="content">
+Onyx character literals have <a href="https://en.wikipedia.org/wiki/Universal_Coded_Character_Set">UCS</a> charset by default, thus being able to hold any Unicode character.
+</td>
+</tr>
+</table>
+</div>
+<div class="exampleblock">
+<div class="content">
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-nx" data-lang="nx"># OK, as long it fits in a UTF-16 codepoint.
+#
+# Note that if `__STDC_UTF_16__` is not set,
+# the behaviour is undefined: a compiler
+# may panic upon this macro evaluation.
+#
+export #define MYCHAR = u'貓'
+
+export void main() {
+  # # TODO:
+  # #
+  # # A) This would even panic on `u'f'`, because it's always a 16-bit codeunit.
+  # # If so, what's the exact result of evaluation? Some `'f'utf16`? Nah.
+  # #
+  # # B) No panic on `u'f'`, as it evaluates to `'f'`, and `'f'u8` is valid.
+  # #
+  # final c = ${MYCHAR}u8 # Panic! Can not constrain literal UCS character `貓` to `UBin8`
+
+  # OK, because `貓` codepoint value fits into 16 bytes
+  final c = ${MYCHAR}u16
+}</code></pre>
+</div>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-nx" data-lang="nx"># Would usually panic upon evaluation,
+# because `🍌` does not fit into 16 bits.
+#
+# However, if `__STDC_UTF_16__` is not set,
+# then the behaviour is undefined: this may
+# actually become a valid constant in C.
+#
+export #define MYCHAR u'🍌'
+
+export void main() {
+  # Evaluates to `c = '🍌'`, which is valid in Onyx.
+  # But again, the compiler may still panic
+  # if `u'🍌'` is invalid in C.
+  final c1 = ${MYCHAR}
+}</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="paragraph">
+<p>A C string constant results in a Onyx string literal, which has UTF-8 encoding by default, regardless of C constant prefixes.</p>
+</div>
+<div class="paragraph">
+<p>Adjacent string literals are concatenated (C translation phase 6).
+A terminating null character is appended to a C string constant (C translation phase 7).
+For example, <code>U"\xfF" U"f"</code><sub>c</sub> becomes <code>"\x{FF}f\0"</code><sub>nx</sub>.</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p>The surrounding context does not affect C macro evaluation.</p>
+</div>
+<div class="paragraph">
+<p>For example, <code>$puts(${MYSTRING})</code> would result exactly in <code>$puts("mystring\0")</code>.
+However, <code>$puts</code> expects a pointer, and <code>"mystring\0"</code> is <code>String&lt;UTF8, 9&gt;</code>; the compiler would thus panic.
+To fix that, change the code to <code>$puts(&amp;${MYSTRING})</code>, which would evaluate to <code>$puts(&amp;"mystring\0")</code>.</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_other_c_macros"><a class="link" href="#_other_c_macros">9.3.3. Other C macros</a></h4>
+<div class="paragraph">
+<p>TODO: Initializers, e.g. <code>export #define FOO {1, 2, 3}</code> and then <code>${FOO}</code>.
+Probably evaluates to <code>1, 2, 3</code>, thus allowing <code>Array(${FOO})</code>, <code>Strukt(${FOO})</code> etc.
+Struct initializers, e.g. <code>export #define BAR { .x = 1, .y = 2 }</code>, <code>${BAR}</code> &#8594; <code>x: 1, y: 2</code>.</p>
+</div>
 </div>
 </div>
 <div class="sect2">
@@ -4565,7 +4809,7 @@ qux((%%0.baz; %%0))</code></pre>
 </div>
 <div id="footer">
 <div id="footer-text">
-Last updated 2020-08-23 16:24:39 UTC
+Last updated 2020-08-24 12:57:13 UTC
 </div>
 </div>
 <script type="text/x-mathjax-config">

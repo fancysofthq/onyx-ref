@@ -670,6 +670,7 @@ In regard to Onyx as well.
 
 .Exporting a C variable
 ====
+```nx
 import "stdlib.h"
 
 extern int foo;
@@ -681,18 +682,177 @@ export void main() {
     unsafe! $exit($(EXIT_FAILURE))
   end
 }
+```
 ====
 
 === C macros
 
 C preprocessor macros may also be imported and exported.
 
-A C macro within Onyx context is used as follows: `$(MACRO)`.
-The evaluation result of a macro is inserted into Onyx with prior processing.
+A C macro within Onyx context is used as follows: `${MACRO}`.
+The evaluation result of a macro is inserted into Onyx after some pre-processing defined below.
+Nested macros are processed in C, and only the final result is pre-processed by Onyx.
+
+Appending an Onyx suffix is legal, e.g. with `MACRO`~c~ evaluating to `42`, `${MACRO}i64` would result in `42i64`.
+
+A C macro is not evaluated within a comment.
+If you really need that, emit a comment from an Onyx macro, and make use of a C macro within the Onyx macro, for example:
+
+====
+```nx
+# Note: a C macro is terminated with a newline,
+# therefore you should not use inline comments
+# for documenting exported C macros.
+export #define MACRO 42
+
+# ${MACRO} is not evaluated here.
+
+{{
+  "# " .. nx.c.lkp("MACRO"):evaluate() ..
+  " is evaluated here."
+}}
+```
+====
+
 
 Within an exporting context, C macros may intuitively be used as they'd be in pure C.
 For example, `export MY_MACRO_VOID main() {` could theoretically expand to `export void main() {`.
 The resulting code is then parsed as usual.
+
+[TIP]
+--
+Fundamentally, a C macro evaluation result may be not cross-platform in terms of C.
+
+For example, the `4294967296ul`~c~ constant is too large for a target where `unsigned long` is 32 bits, limited to `4294967295`.
+This would therefore result in a panic on *some* platforms.
+
+But what really matters in crossing the C-Onyx boundary is a C constant's contents.
+
+For instance, `l` and `ll` suffixes are ignored in Onyx.
+What Onyx sees after the C macro evaluation is `4294967296u`, and you shall explicitly constrain a macro evaluation result to the bitsize you want, with 32 being the reasonable default.
+For example, with `${BIG}u64` evaluating to `4294967296uu64` the code would be valid and cross-platform.
+
+TODO: Shall think more on `ll` suffixes and that cross-platform stuff.
+--
+
+==== C numeric constants
+
+If a C macro evaluated to a numerical constant without any suffixes, the following rules apply:
+
+* Octal constants (those beginning with zero) are converted to the `0o`~nx~ notation.
+For example, `052`~c~ becomes `0o52`~nx~.
+
+* Hexadecimal constants are converted into the canonical Onyx notation, where `x` is always in lower case and hex decimals are in upper case.
+For example, `0X2a`~c~ becomes `0x2A`~nx~.
+
+* Floating-point constants beginning or ending with a dot get the missing leading or trailing zero inserted.
+For example, `.1`~c~ becomes `0.1`~nx~, and `1.`~c~ becomes `1.0`~nx~.
+
+* Exponent symbols in floating-point constants are converted to their lower-case counterparts.
+For example, `1E3`~c~ becomes `1e3`~nx~, and `0XAbP2`~c~ becomes `0xABp2`.
+
+An Onyx integer literal is constrained to `SBin32` by default.
+Therefore, if a C integer constant does not fit into 32 bits, a compiler would panic.
+To fix that, manually constrain a C macro evaluation result.
+For example, with `export #define MACRO 2147483648`, `${MACRO}` would result in `2147483648`, which would panic.
+Using a suffix would fix that: `${MACRO}i64` evaluates to `2147483648i64`, which is legal.
+
+Appending a `u` suffix to a C constant macro results in `u` suffix also appended in Onyx.
+For example, `export #define N 42U`, `${N}` becomes `42u`.
+
+Appending a `l` or `ll` suffix to a C constant macro is ignored.
+You should still constrain the result to the type you want, with `SBin32` or `UBin32` being the implicit defaults.
+For example, `export #define BIG 8589934592ull`, `${BIG}` would result in `8589934592u`, which does not actually fit into 32 bits, thus panics.
+`${BIG}u64` would result in `8589934592uu64`, which is a valid Onyx literal.
+
+==== C text constants
+
+A single-byte or `u8`-prefixed integer character constant is left as-is.
+For example, `'f'`~c~ and `u8'f'`~c~ both result in `'f'`~nx~.
+
+Octal character codepoints are converted to such in Onyx, for example `'\141'`~c~ becomes `'\o141'`~nx~.
+
+NOTE: The `\141`~nx~ notation in Onyx means decimal ordinal 141.
+Therefore, `'\97' == 'a'`~nx~.
+
+A hexadecimal sequence character constant becomes a hexadecimal codepoint character literal in Onyx notation.
+For example, `'\xaB'`~c~ becomes `'\xAB'`~nx~.
+
+https://en.cppreference.com/w/c/language/escape[C escape sequences] are a subset of those in Onyx, therefore they are left as-is.
+
+Multi-codepoint C constants are disallowed, because in Onyx a single character shall contain exactly one codepoint. Also C18§6.4.4.4.10:
+
+> The value of an integer character constant containing more than one character (e.g., `'ab'`), _[...]_ is implementation-defined.
+
+Multi-byte character C constants, i.e. those prefixed with `u`, `U` and `L`, result in the same single codepoint Onyx character literal.
+Note that if a constant codepoint is out of range defined by C environment, the compiler would panic.
+
+TIP: Onyx character literals have https://en.wikipedia.org/wiki/Universal_Coded_Character_Set[UCS] charset by default, thus being able to hold any Unicode character.
+
+====
+```nx
+# OK, as long it fits in a UTF-16 codepoint.
+#
+# Note that if `__STDC_UTF_16__` is not set,
+# the behaviour is undefined: a compiler
+# may panic upon this macro evaluation.
+#
+export #define MYCHAR = u'貓'
+
+export void main() {
+  # # TODO:
+  # #
+  # # A) This would even panic on `u'f'`, because it's always a 16-bit codeunit.
+  # # If so, what's the exact result of evaluation? Some `'f'utf16`? Nah.
+  # #
+  # # B) No panic on `u'f'`, as it evaluates to `'f'`, and `'f'u8` is valid.
+  # #
+  # final c = ${MYCHAR}u8 # Panic! Can not constrain literal UCS character `貓` to `UBin8`
+
+  # OK, because `貓` codepoint value fits into 16 bytes
+  final c = ${MYCHAR}u16
+}
+```
+
+```nx
+# Would usually panic upon evaluation,
+# because `🍌` does not fit into 16 bits.
+#
+# However, if `__STDC_UTF_16__` is not set,
+# then the behaviour is undefined: this may
+# actually become a valid constant in C.
+#
+export #define MYCHAR u'🍌'
+
+export void main() {
+  # Evaluates to `c = '🍌'`, which is valid in Onyx.
+  # But again, the compiler may still panic
+  # if `u'🍌'` is invalid in C.
+  final c1 = ${MYCHAR}
+}
+```
+====
+
+A C string constant results in a Onyx string literal, which has UTF-8 encoding by default, regardless of C constant prefixes.
+
+Adjacent string literals are concatenated (C translation phase 6).
+A terminating null character is appended to a C string constant (C translation phase 7).
+For example, `U"\xfF" U"f"`~c~ becomes `"\x{FF}f\0"`~nx~.
+
+[NOTE]
+--
+The surrounding context does not affect C macro evaluation.
+
+For example, `$puts(${MYSTRING})` would result exactly in `$puts("mystring\0")`.
+However, `$puts` expects a pointer, and `"mystring\0"` is `String<UTF8, 9>`; the compiler would thus panic.
+To fix that, change the code to `$puts(&${MYSTRING})`, which would evaluate to `$puts(&"mystring\0")`.
+--
+
+==== Other C macros
+
+TODO: Initializers, e.g. `export #define FOO {1, 2, 3}` and then `${FOO}`.
+Probably evaluates to `1, 2, 3`, thus allowing `Array(${FOO})`, `Strukt(${FOO})` etc.
+Struct initializers, e.g. `export #define BAR { .x = 1, .y = 2 }`, `${BAR}` -> `x: 1, y: 2`.
 
 === External declarations
 

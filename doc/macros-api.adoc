@@ -1,0 +1,4 @@
+[appendix]
+= Macros API
+
+This section will contain the <<_macros, macros>> API.

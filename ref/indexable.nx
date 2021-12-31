@@ -1,0 +1,19 @@
+export class IndexError<K> : Exception {
+  final index : K
+
+  static def self(index : K) -> self({
+    Exception(message: "Invalid index #{ index }"),
+    index
+  })
+}
+
+export default trait Indexable<Key: K, Value: V> {
+  # Get value at *index*. Throws if there is none.
+  decl [](index : K) -> V throws IndexError<K>
+
+  # Get value at *index* or return `void` if there is none.
+  decl []?(index : K) -> V??
+
+  # Replace value at *K* with *value*, returning the old value, if any.
+  decl []=(index : K, value : V) -> V?? throws IndexError<K>
+}

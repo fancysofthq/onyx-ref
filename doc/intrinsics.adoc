@@ -1,0 +1,13 @@
+[appendix]
+= Intrinsics
+
+```nx
+builtin threadsafe @fence<
+  SyncScope ~ \String = undefined
+>()
+
+builtin fragile @fence<
+  Ordering : \MemoryOrdering = :seqcst,
+  SyncScope ~ \String = undefined
+>()
+```

@@ -1,0 +1,3 @@
+export default trait Pushable<Type: T> {
+  decl push(value : T) -> void
+}

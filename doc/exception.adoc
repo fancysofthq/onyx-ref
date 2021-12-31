@@ -1,0 +1,102 @@
+= Exception handling
+
+An Onyx program may stem:[tt "throw"] an _exception_ in runtime.
+
+A potentially throwing region of code may be wrapped in a stem:[tt "try"] statement, which may contain zero or more stem:[tt "catch"] clauses.
+A stem:[tt "catch"] clause accepts a <<_generator, generator>> block with a single argument, which is the caught exception instance.
+
+.Basic exception handling
+====
+.main.nx
+```nx
+try {
+  throw Exception("Boom!")
+} catch ((e) => {
+  print("Caught exception: #{ e.message }")
+})
+```
+
+```sh
+$ fnx main.nx
+Caught exception: Boom!
+$ echo($?)
+0
+```
+====
+
+A stem:[tt "catch"] clause may be overloaded to be triggered on a matching exception type.
+To make an object throwable, it must be or inherit the builtin `Exception` class.
+A `String` instance may also be thrown; in that case, the string is implicitly passed as the `message` argument, i.e. `throw "Message"` stem:[-=] `throw Exception("Message")`.
+
+.Custom exception class
+====
+.main.nx
+```nx
+class Boom : Exception {
+  static self() -> self({ Exception("Boom!") })
+}
+
+try {
+  throw Boom()
+}
+
+# Would match anything other than `: Boom`.
+catch (e => {
+  print("Uncaught exception: #{ @typeof(e) }")
+})
+
+# Would match `: Boom` only.
+catch ((e : Boom) => {
+  print("Explosion averted")
+})
+```
+
+```sh
+$ fnx main.nx
+Explosion averted
+$ echo($?)
+0
+```
+====
+
+An Onyx program contains the implicit default last-resort handler which would pretty-print an unhandled exception and gracefully exit the program.
+A compiler preserves macro data to ease debugging.
+
+.Rescuing unhandled exception
+====
+.main.nx
+```nx
+{{
+  %Q[def foo() -> {\nthrow "Oops"\n}]
+}}
+
+foo()
+```
+
+```sh
+$ fnx main.nx
+Exception! Oops
+
+@ <macro>:2:3
+
+  1. | def foo() -> {
+  2. |   throw "Oops"
+         ^
+  3. | }
+
+  % /main.nx:1:1
+
+    1. | {{
+         ^
+    2. |   %Q[def foo() -> {\nthrow "Oops"\n}]
+
+@ /main.nx:5:1
+
+  4. |
+  5. | foo()
+       ^
+
+$ echo($?)
+1
+```
+====

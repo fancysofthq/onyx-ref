@@ -1,0 +1,79 @@
+= Variant
+
+> In computer science, a tagged union, also called a variant […], is a data structure used to hold a value that could take on several different, but fixed, types.
+Only one of the types can be in use at any one time, and a tag field explicitly indicates which one is in use.
+-- Wikipedia contributors, https://en.wikipedia.org/wiki/Tagged_union
+
+A possible variant value is called an _option_ in Onyx.
+Option type ordering in a variant type is irrelevant, i.e. `Variant<stem:[tau], stem:[upsilon]>` stem:[-=] `Variant<stem:[upsilon], stem:[tau]>`.
+
+A variant constructor accepts either a narrower variant instance or an instance of one of its options type (i.e. may be autocast).
+
+.Variant construction
+====
+```nx
+final x : Variant<Int32, String> = 42         # OK, accepts an option instance
+final y : Variant<Int32, Float64, String> = x # OK, accepts a narrower variant
+```
+====
+
+An actual variant instance option value may be extracted with either stem:[tt "@get"] or stem:[tt "@get?"] instrinsic invocation.
+The <<_safety, safety>> of invoking an intrinsic depends on the instance <<_storage, storage>>: a local variant instance has threadsafe access, otherwise it's fragile.
+
+CAUTION: You can explicitly obtain a variant tag offset in bytes using the stem:[tt "@offsetof"] intrinsic.
+
+.Variant intrinsics
+====
+```nx
+import rand from "std/rand"
+import { out } from "std/term"
+
+# TIP: The top-level scope is fragile.
+#
+
+final var = rand(42, "foo") : Variant<Int32, String>
+
+final a = @get<Int32>(var) : Int32     # May throw `VariantError` if it's not `Int32`
+final b = @get?<String>(var) : String? # May return `nil` if it's not `String`
+
+# Unsafely get a `String` option.
+final c = unsafe! *((&var as void*)[@offsetof(var)] as String*)
+```
+====
+
+// A variant instance virtualized to an option type stem:[upsilon] allows direct access as if it was a stem:[upsilon] instance.
+
+// A compiler shall automatically virtualize a non-final variant instance within a branch body (see <<_jump>>) if an option determination took place in a threadsafe environment, i.e. there are guarantees that the variant instance won't be altered by another thread.
+// A final variant instance is automatically virtualized in any safety environment.
+
+// .Variant access safety
+// ====
+// ```nx
+// threadsafe! {
+//   let x = rand(42, "foo") # This is a local variable
+
+//   if (@is?<Int32>(x)) {
+//     x += 1      # OK, because `x : Variant<Int32, String>~Int32`
+//     # x = "bar" # => Panic! Can not assign `String` to `x~Int32`
+
+//     x~Variant = "bar" # OK, de-virtualize to `Variant<Int32, String>~Variant<Int32, String>`
+
+//     # x += 1     # => Panic! `x~Variant<Int32, String>.+(Int32)` is undeclared
+//     # x += "baz" # => Panic! Ditto
+//   } else {
+//     x += "baz" # OK, `x~String`
+//   }
+// }
+// ```
+
+// ```nx
+// let x = rand(42, "foo") # A static non-final variable
+
+// threadsafe foo() {
+//   if (fragile! @is?<Int32>(x)) {
+//     fragile! x~Int32 += 1 # Virtualization would be fragile, and may even throw
+//     unsafe! x~Int32 += 1  # Unsafely virtualize if sure about multi-threaded access
+//   }
+// }
+// ```
+// ====

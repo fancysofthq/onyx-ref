@@ -1,0 +1,21 @@
+= String
+
+TODO: `String` is similar to `std::string` in C++.
+UTF-8-encoded and null-terminated.
+
+TODO: Unicode is likely to be a part of stdlib, but Onyx string literal are all Unicode.
+`\x{}` for explicit hexadecimal values.
+Brackets are always mandatory.
+
+TODO: Formatting.
+`"Invalid index #{ index }"` calls `.to<String>()` on interpolations.
+
+```nx
+let foo = "bar"            # Would be `String`
+# let foo : $char* = "bar" # Panic!
+let foo : $char* = $"bar"  # OK (C literal)
+```
+
+== Char
+
+A `Char` is a type with size enough to hold any single Unicode character.

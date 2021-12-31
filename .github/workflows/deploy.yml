@@ -2,29 +2,27 @@ name: Deploy
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-    - name: Set up Ruby
-      uses: ruby/setup-ruby@v1
-      with:
-        ruby-version: 2.6
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 2.6
 
-    - name: Install dependencies
-      run: bundle install
+      - name: Install dependencies
+        run: |
+          bundle install
+          bundle exec ruby main.rb
 
-    - name: Compile the reference
-      run: bundle exec ruby main.rb
-
-    - name: Deploy
-      uses: JamesIves/github-pages-deploy-action@3.5.9
-      with:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        BRANCH: gh-pages
-        FOLDER: build
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@4.1.8
+        with:
+          branch: gh-pages
+          folder: build

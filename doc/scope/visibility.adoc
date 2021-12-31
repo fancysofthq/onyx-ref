@@ -1,0 +1,17 @@
+= Visibility
+
+_Visibility_ may be either _public_ or _private_.
+
+By default a variable or function is public.
+It may be defined explicitly private using the stem:[tt "private"] modifier.
+It is not possible to access a private member of a scope other than by wrapping the access in some getter.
+A visibility modifier can not be overloaded, only overriden; with an exception for a <<_class, class>> constructor.
+
+```nx
+struct Foo {
+  def bar();            # Implicitly public by default
+  private reimpl bar(); # Now it's private
+}
+
+# Foo().bar() # => Panic! Can not access private field `Foo.bar`
+```

@@ -1,0 +1,34 @@
+# TODO: Seed?
+#
+
+extern #include <stdlib.h>
+
+# Return a single random value of type *T*.
+export decl rand<T>() : T
+
+impl rand<Int32>() -> {
+  return unsafe! $rand() as Int32
+}
+
+impl rand<Bool>() -> {
+  return unsafe! $rand() as Int32
+}
+
+# Return a random boolean value.
+export alias rand?() -> rand<Bool>()
+
+# Return a random value of type `Variant<T>` from the list of *args*.
+#
+# ```
+# rand(42, "foo", "bar") : Variant<Int32, String>
+# ```
+#
+export decl rand<*T>(*args : Variant<*T>) -> Variant<*T>
+
+# Return a random value of type `T` from the list of *args*.
+#
+# ```
+# rand("foo", "bar") : String
+# ```
+#
+export prefer decl rand<T>(*args : T) -> T

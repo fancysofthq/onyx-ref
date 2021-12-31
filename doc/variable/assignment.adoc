@@ -1,0 +1,145 @@
+= Assignment
+
+A <<_record, record>>, <<_struct, struct>>, <<_enum, enum>>, <<_variant, variant>> or <<_function, function>> instance is assigned by value, i.e. copied.
+A <<_class, class>> (including <<_lambda, lambda>>) instance is assigned by reference; the reference counter is implicitly incremented upon assignment and decremented upon leaving the scope (see <<_gc>>).
+A freestanding (i.e. not contained in a variant) <<_unit, unit>> and <<_void, stem:[tt "void"]>> don't have size and therefore its underlying assignment mechanism is undefined; moreover, stem:[tt "void"] can not be assigned at all.
+
+If an assignment operation has a receiver, its result would be yet another copy of the assigned value.
+
+```onyx
+class Dog {
+  let name : String
+  static self(name) -> self({ name })
+}
+
+final spike = Dog("Spike")        # Reference is created, RC = 1
+final friend = spike              # Reference is copied, RC = 2
+final good_boy = (friend = spike) # Another reference is copied, RC = 3
+```
+
+Assigning or passing a <<_literal, literal>> creates a new object instance with type depending on the literal itself and its restriction.
+
+```onyx
+let x : UInt32 = 42 # Would be `Int32` without the restriction
+let y = x           # Copy the `x` value and set `y` to it
+```
+
+A compiler would panic if it detects a use of an undefined yet variable or a variable which hasn't been assigned yet.
+A variable may be unsafely assigned an explicitly stem:[tt "unitialized"] value, though.
+Accessing it would be an undefined behaviour.
+
+```onyx
+# x = 42 # Panic! Undeclared variable `x`
+
+let x = unsafe! uninitialized Int32 # OK
+
+x # Accessing `x` here is undefined behaviour
+
+x = 42
+x # OK, it's now safe
+```
+
+== Multi-assignment
+
+Multiple variables can be assigned at once, also during definition (called _multi-definition_).
+
+When assigning to a single value, `x, y = z` ≡ `(x = (y = z))`.
+Therefore, the latest inferred type wins, unless explicitly restricted.
+
+.Multi-assignment of a single value
+```onyx==
+let x, y, final z : UInt32 = 1 # OK, all three are `UInt32`
+
+# Equivalent to:
+#
+
+final z = 1 : UInt32
+let y = z
+let x = y
+```
+
+Multiple variables may also be assigned to the same amount of values, not just a single one.
+
+.Multi-assignment of multiple values
+```onyx
+# final x, y = 1, 2, 3 # => Panic! Multiple assignment mismatch
+  final x, y = 1, 2    # OK
+```
+
+// Multiple variables definition ends upon encountering an assignment or restriction.
+
+// ```onyx
+// # final x, y = 1, z = 2       # => Panic! Undeclared variable `z` (`z = 2` is an assignment)
+//   final x, y = 1, final z = 2 # OK, `x` and `y` are `1`, `z` is `2`
+//   final x, y : Int32, z = 2   # OK, `x` and `y` don't have a value set, but both `Int32`
+//   final x, y, z : Int32 = 2   # OK, all three are `2 : Int32`
+// ```
+
+=== Splatting
+
+A record, tuple, array or tensor container can be _splatted_ using the `*` operator.
+A compiler treats a splatted container as if its elements were hard-coded into the source code one-by-one, comma-separated, which suits multi-assignment.
+A splatted record also includes its fields' labels.
+
+TIP: You may imagine the splat operator as a road roller flattening its operand into the source code.
+
+```onyx
+# These are all equivalent.
+let x, y = *(a, b)
+let x, y = *[a, b]
+let x, y = *|a, b|
+let x, y = *{ x: a, y: b }
+let x, y = a, b
+```
+
+A variable definition may be labeled to map a splatted record's field.
+
+```onyx
+final record = { x: 1, y: 2 }
+
+final x: a, y = *record
+
+# assert(x == 1) # => Panic! Undeclared `x`
+assert(a == 1)   # OK
+assert(y == 2)   # OK
+```
+
+Pointer dereferencing operation has higher precedence than splatting.
+
+```onyx
+let tuple = (a, b)
+let x, y = **&tuple # First, dereference the tuple. Then, splat it
+```
+
+Also see <<_unsplatting>>.
+
+== Autocasting
+
+There is just a little assignment autocasting in Onyx.
+Note that assignment is a copy operation, passing an argument is therefore also considered an assignment.
+Autocasting, on the other hand, is not an operation, but a compiler instruction.
+
+A pointer type may be autocast based on its properties.
+A variant may be assigned its option type instance.
+Callables (function, lambda, <<_generator, generator>>) also have specific autocasting rules.
+A record, struct, class, unit or enum instance may be implicitly upcast to an ancestor type.
+// Integers and floats may be implicitly cast to an instance of a greater bitsize.
+
+// ```onyx
+// let x : Int32 = 42
+// let y : Int64 = x # OK, `Int64` contains `Int32`
+// ```
+
+Anything else requires explicit casting with stem:[tt "as"] operator, or conversion of some sort.
+
+```onyx
+let x : Int32 = 42
+
+# let y : Float64 = x   # Panic! Can not assign `Int32` to `Float64`
+let y = x.to<Float64>() # OK
+
+class Animal { }
+class Dog : Animal { }
+
+final animal : Animal = Dog() # OK
+```

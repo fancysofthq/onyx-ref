@@ -1,0 +1,4 @@
+import Hypercomplex from "./real.nx"
+
+export default trait Real : Hypercomplex<self, 0> {
+}

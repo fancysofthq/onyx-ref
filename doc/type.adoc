@@ -1,0 +1,162 @@
+= Type system
+
+> In computer science and computer programming, a data type or simply type is an attribute of data which tells the compiler or interpreter how the programmer intends to use the data. […]
+> A data type constrains the values that an expression, such as a variable or a function, might take. This data type defines the operations that can be done on the data, the meaning of the data, and the way values of that type can be stored.
+> -- Wikipedia conributors, https://en.wikipedia.org/wiki/Data_type
+
+A data type in Onyx is complex: it is comprised of real and virtual parts.
+The _real type_ defines _memory layout_ of the data, while _virtual type_ defines the way the data _behaves_.
+A virtual type is always the same or narrower-than the real type.
+
+Given that there is a variable `x` of type `Float64~Real`, the memory layout of `x` would be defined by the built-in `Float64` type, that is, 64 bits.
+But it would _behave_ in accordance to the virtual `Real` trait restriction, which is the common trait of all real numbers (stem:[RR]).
+Effectively, this would, for example, disallow calling the floating-point-specific `.round()` method on `x`.
+
+In contrary, if `y` was simply of type `Float64` or `Float64~Float` or even `Float64~Float64`, the `.round()` method would remain accessible.
+A `stem:[tau]~stem:[tau]` type can be written as simply `stem:[tau]`.
+
+```nx
+let x : Float64~Real = 42.0
+# x.round() # Panic! Undeclared method `Float64~Real.round()`
+
+let y : Float64 = 42.0
+y.round() # OK
+```
+
+TIP: The `stem:[tau] : stem:[upsilon]` notation is taken directly from https://en.wikipedia.org/wiki/Type_theory[type theory].
+The spacing is required because the notation also acts as an actionable restriction operator.
+A colon adjacent to an identifier is a distinct entity called _label_, which is used for argument aliasing.
+
+== Virtualization
+
+An application of an virtual type restriction for the purpose of narrowing down a runtime data behaviour is called _virtualization_.
+Virtualization reduces ambiguity, improves code readability and ensures long-term project maintainability.
+
+<<_example_simple_virtualization>> introduces the reader to the concept of virtualization.
+
+[[_example_simple_virtualization]]
+.Simple virtualization
+====
+```nx
+let x : Float64 = 42.0
+
+# `Float64.round` is declared.
+x.round() # OK
+
+# Temporarily virtualizing `x` to `~Real` removes
+# the ability to call `Float64`'s methods.
+# x~Real.round() # => Panic! Undeclared `Float64~Real.round`
+
+# Storing a virtualized type permanently.
+# `y` type is inferred to be `: Float64~Real`.
+let y = x~Real
+# y.round() # => Panic! Undeclared `Float64~Real.round`
+```
+====
+
+Virtualization can be used to solve ambiguity.
+For example, when a type implements multiple traits with the same method name, virtualizing an instance to a trait type would help selecting the desired method.
+
+Also, a virtual restriction is used in template types, more on that later.
+
+When a <<_switch, switch>> case is a virtual type, the switcher is virtualized to that type within the case body.
+Alternatively, a type may be checked using the _virtual type comparison_ operator `~?`, which evaluates to stem:[tt "true"] if the type matches the virtual restriction, stem:[tt "false"] otherwise.
+In other words, if a virtual type comparison is contained within a condition, and there are guarantees that the data won't be altered, then the virtualization applies within the branch.
+It is illegal to directly apply a non-narrower virtualization, it must be queired with `~?` or narrowed in some other way beforeahead (see the example below).
+
+A single type is a degratory case of a _type expression_ following the boolean logic rules.
+stem:[and] (`&&`), stem:[or] (`||`) and stem:[neg] (`!`) operations are implemented, which may be grouped in parentheses.
+Complex expressions are used to narrow the type even more.
+
+<<_example_advanced_virtualization>> is more complicated, but it demonstrates how virtualization ensures long-term maintainability of programs written in Onyx.
+The code below would continue working even if added another `Drawable4D` trait with the same `draw()` method.
+
+[[_example_advanced_virtualization]]
+.Advanced virtualization
+====
+```nx
+# Both traits have the same-named method declaration.
+trait Drawable2D { decl draw() }
+trait Drawable3D { decl draw() }
+
+struct Figure { }
+
+struct Square : Figure, Drawable2D {
+  impl draw() { } # Implements the `Drawable2D`'s method
+}
+
+struct Cube : Figure, Drawable2D {
+  impl draw() { } # Also implements the `Drawable2D`'s method
+}
+
+# ...
+
+# Later on we decide to also make a cube drawable in 3D.
+# It would break existing `cube.draw()` calls.
+impl Cube : Drawable3D
+  # impl draw() { }                   # => Panic! Ambiguous
+  impl (self ~ Drawable3D).draw() { } # OK, virtualized to select the one we need
+  # impl self~Drawable3D.draw() { }   # A legal shortcut
+  # impl ~Drawable3D.draw() { }       # Or even shorter
+end
+
+# Now, let's run some code.
+#
+
+let square = Square()
+square.draw()            # OK, call the 2D implementation
+square~Drawable2D.draw() # Ditto
+
+let cube = Cube()
+# cube.draw()          # => Panic! Ambigous (that's the effect of deriving `Drawable3D`)
+cube~Drawable2D.draw() # Call the 2D implementation explicitly
+cube~Drawable3D.draw() # Call the 3D implementation explicitly
+
+# def draw<T ~ Figure>(figure : T) # Can be shortcut:
+def draw(figure ~ Figure)
+  if (figure ~? Drawable2D)
+    @debug<@typeof(figure)>()  # => T~(Figure && Drawable2D) (note the expression)
+    figure.draw()              # Always call the 2D implementation
+    figure~Drawable2D.draw()   # Ditto
+    # figure~Drawable3D.draw() # => Panic! Can not virtualize to `Drawable3D`
+
+    switch (figure) {
+      case ~Drawble3D {
+        @debug<@typeof(figure)>() # => T~(Figure && Drawable2D && Drawable3D)
+        # figure.draw()           # Panic! Ambigous call
+        figure~Drawable2D.draw()  # Have to choose now
+        figure~Drawable3D.draw()  # OK
+      } else {
+        @debug<@typeof(figure)>()  # => T~(Figure && Drawable2D && !Drawable3D)
+        figure.draw()              # Always call the 2D implementation
+        figure~Drawable2D.draw()   # Ditto
+        # figure~Drawable3D.draw() # => Panic! Can not virtualize to `Drawable3D`
+      }
+  else
+    @debug<@typeof(figure)>()  # => T~(Figure && !Drawable2D)
+    # figure.draw()            # => Panic! Undefined `T~Figure.draw`
+    # figure~Drawable2D.draw() # => Panic! Can not virtualize to `Drawable2D`
+    # figure~Drawable3D.draw() # => Panic! Can not virtualize to `Drawable3D`
+  end
+
+  @debug<@typeof(figure)>()  # => T~Figure
+  # figure.draw()            # => Panic! Undefined `T~Figure.draw`
+  # figure~Drawable2D.draw() # => Panic! Can not virtualize to `Drawable2D`
+  # figure~Drawable3D.draw() # => Panic! Can not virtualize to `Drawable3D`
+end
+```
+====
+
+It may be seen that it's up to a programmer to decide on the virtualization level in their projects based on to what extent the program is expected to grow in the future.
+
+include::./type/restriction.adoc[leveloffset=+1]
+include::./type/record.adoc[leveloffset=+1]
+include::./type/declaration.adoc[leveloffset=+1]
+include::./type/template.adoc[leveloffset=+1]
+include::./type/inheritance.adoc[leveloffset=+1]
+include::./type/category/trait.adoc[leveloffset=+1]
+include::./type/category/struct.adoc[leveloffset=+1]
+include::./type/category/class.adoc[leveloffset=+1]
+include::./type/category/enum.adoc[leveloffset=+1]
+include::./type/category/unit.adoc[leveloffset=+1]
+include::./type/category/annotation.adoc[leveloffset=+1]

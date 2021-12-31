@@ -1,0 +1,68 @@
+= Type declaration
+
+A type can be _declared_ using a stem:[tt "decl"] statement.
+A type declaration requires its _category_ to be declared, one of <<_struct, stem:[tt "struct"]>>, <<_class, stem:[tt "class"]>>, <<_enum, stem:[tt "enum"]>>, <<_flag, stem:[tt "flag"]>>, <<_trait, stem:[tt "trait"]>>, <<_unit, stem:[tt "unit"]>> or <<_annotation, stem:[tt "annotation"]>>.
+
+A type identifier rules are similar <<_variables, variables>>, i.e. `/[a-zA-Z_](a-zA-Z0-9_)*/`.
+A type identifier also may be wrapped in backticks to allow Unicode characters in it.
+By convention a type name begins with an uppercase letter.
+The only exceptions are keywords<<_nil, stem:[tt "nil"]>>, <<_void, stem:[tt "void"]>> and <<_discard, stem:[tt "discard"]>>.
+
+A type declaration does not contain body.
+A declared type doesn't have size hence incomplete.
+Still, it may act as a virtual type restriction, or a template argument which doesn't need to be complete (e.g. a pointer type).
+
+```nx
+decl struct Point
+# Point()            # => Panic! Can not construct an incomplete type instance
+let pointer : Point* # OK, a pointer to incomplete type is legal
+```
+
+To be able to make use of a declared type, it shall be _implemented_.
+An attempt to implement an undeclared yet type panics.
+An implemented type becomes complete hence usable in runtime.
+
+```nx
+impl Point {
+  let x, y : Float64
+  def length() -> (this.x ** 2 + this.y ** 2).sqrt()
+}
+
+let point = Point({ x: 3, y: 4 })
+assert(point.length() == 5)
+```
+
+Once a type is implemented, it may not be implemented again.
+Multiple non-intersecting partial implementations of the same type are allowed, which is only applicable to a <<_template_type, template type>>.
+
+[[_extend]]
+To extend an existing implementation, an stem:[tt "extend"] statement shall be used.
+Attempt to extend an unimplemented yet type panics.
+An annotation type can be neither implemented nor extended.
+
+```nx
+decl struct Foo<T>
+
+forall [T ~ Real] impl Foo<T> {
+  let real : T = 0
+}
+
+# Already implemeneted for all `~ Real`, `Int32` is `~ Real`.
+# impl Foo<Int32> { } # => Panic! Already implemented
+
+# Should extend instead.
+extend Foo<Int32> {
+  let int_specific : Int32 = 0 # Define a field exclusively for this specialization
+}
+
+# Foo<Float64>().int_specific # => Panic! Undefined `Foo<Float64>.int_specific`
+Foo<Int32>().int_specific     # OK
+```
+
+[[DESIGN]]
+====
+It is tempting to allow an explicit stem:[tt "reimpl"] statement for an already implemented type, which would obliterate all previous member definitions.
+However, this would reduce the program maintainability in a longer run.
+Therefore, reimplementing a type in Onyx is illegal.
+It is still legal to <<_reimpl, reimplement>> a function, though.
+====

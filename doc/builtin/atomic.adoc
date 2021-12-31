@@ -1,0 +1,61 @@
+= Atomic
+
+An `Atomic<stem:[tau]>` type implementation contains a set of static atomic operations accepting a pointer to an object of type stem:[tau].
+A threadsafe operation overload is performed with sequential consistency, i.e. the strongest memory ordering guarantees.
+A fragile operation overload accepts an explicit `\MemoryOrdering` template argument.
+
+```nx
+let x = Box(42)
+
+threadsafe! {
+  fragile! x.value += 1 # Not threadsafe
+  Atomic.incr(&x.value) # Increment atomically with sequentially consistent ordering
+  fragile! Atomic.incr<:release>(&x.value) # Increment atomically with "release" ordering
+}
+```
+
+There is a number of existing implementations for primitive types, e.g. `Atomic<Int32>`.
+A programmer is also free to implement their own `Atomic` types.
+
+```nx
+let x = Atomic<Int32>(0)
+
+threadsafe! {
+  x += 1 # Calls `Atomic<Int32>.+=`, which increments self atomically
+  fragile! x.incr<:release>(1)
+}
+```
+
+Without a `MemoryOrdering` template argument, a `@fence` instrinsic invocation emits a sequentially consistent fence.
+Otherwise, the invocation is fragile.
+
+```nx
+let x = Box(42)
+
+threadsafe! {
+  @fence() # Implicitly `@fence<:seqcst>()`, thus threadsafe
+
+  fragile! @fence<:acquire>()
+  fragile! box.value += 1
+  fragile! @fence<:release>()
+}
+```
+
+`Atomic` functions and `@fence` intrinsic also accept a `SyncScope ~ \String` template argument, which defines its program-wide synchronization scope.
+
+```nx
+let x = 42
+
+# These ops are *not* syncronised.
+Atomic.incr<"scope1">(&x)
+Atomic.incr<"scope2">(&x)
+```
+
+An instance of `Atomic<stem:[tau]>` declares a set of atomic access methods.
+The Standards defines a list of atomic specializations, e.g. `Atomic<Int32>`.
+
+```nx
+let x = Atomic<Int32>(0)
+x += 1 # Atomically increment with implicit sequential consistency
+x.+=<:acquire, "scope2">(1) # A verbose call
+```

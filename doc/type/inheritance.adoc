@@ -1,0 +1,73 @@
+= Type inheritance
+
+A type stem:[tau] may inherit another type stem:[alpha] upon declaration, implementation or extension using the `stem:[tau] : stem:[alpha]` notation.
+Inherited types are comma-separated and may _optionally_ wrapped in square brackets.
+
+A member with an explicit stem:[tt "static"] modifier is not inherited.
+
+```nx
+trait Enumerable<T> {
+  decl each(block : T => discard) : void
+}
+
+# Inherits `Enumerable` and proxies the template argument to it.
+class List<U> : Enumerable<U> {
+  # Implicitly `each(block : U => discard)`.
+  impl each(block) {
+    let i = 0z
+    while (i < this.size)
+      block(this[i++])
+  }
+}
+```
+
+If an inherited type contains a field, the field then can be defined again with exactly the same type in the inheriting type.
+Fields have undefined order, but an ancestor's field are guaranteed to come earlier.
+A field default value may be overriden or even removed in an inheriting type.
+
+TIP: See <<_struct>> and <<_class>> for constructor documentation.
+
+```nx
+struct Foo {
+  let foo : Int32 = 0
+}
+
+struct Bar : Foo {
+  let foo : Int32 = 1 # Override the default value
+}
+
+struct Baz : Foo {
+  let foo : Int32 # Undefine the default value completely
+}
+
+assert(Foo().foo == 0)
+assert(Bar().foo == 1)
+
+# Baz()                          # => Panic! Undeclared `Bar::Baz()`
+assert(Baz({ foo: 0 }).foo == 0) # OK
+```
+
+Referencing an ambigous method declared in an inherited type would require <<_virtualization, virtualization>>.
+
+```nx
+trait Foo {
+  decl foo()
+}
+
+trait NotFoo {
+  decl foo() # Note the same name
+  decl bar()
+}
+
+struct Bar : Foo, NotFoo {
+  # impl foo() { }    # => Panic! Ambigous
+  impl ~Foo:foo() { } # OK, being specific
+  impl bar() { }      # OK, no ambiguity
+}
+
+# Bar().foo()   # => Panic! Ambigous
+Bar()~Foo.foo() # OK
+Bar().bar()     # OK
+```
+
+See type categories documentation for category-specific inheritance rules.

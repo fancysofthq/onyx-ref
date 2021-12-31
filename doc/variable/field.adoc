@@ -1,0 +1,244 @@
+= Field
+
+A variable defined with an (implicit) instance <<_storage, storage>> within a record, struct or class type is called a _field_.
+
+A stem:[tt "final"] record or struct variable is deemeed immutable: its fields can not be reassigned.
+A stem:[tt "final"] class variable, on the other hand, allows updating its fields as long as they are public.
+
+Accessing a field of a local record or struct variable is threadsafe.
+If the variable is static, the access is fragile.
+
+```nx
+struct Point {
+  let x, y : Float64
+  def length() -> (this.x ** 2 + this.y ** 2).sqrt()
+}
+
+let point = Point({ x: 3, y: 4}) # A local struct variable
+
+assert(point.x == 3)                # Threadsafe field access
+assert(point.length() ~= *(5, 0.1)) # Threadsafe method access
+```
+
+== Default field value
+
+A field may have a _default value_ expression, which is evaluated in a threadsafe context if the field is not explicitly initialized upon the containing object creation.
+A unit field must always have a default value set.
+
+It is legal to override a field with the same type and any default value, even none.
+The latest default value expression wins.
+
+```nx
+struct Point {
+  let x, y : Float64 = 0
+}
+
+assert(Point({ x: 0, y: 0 }) == Point())
+```
+
+Within a field default value expression, another field may be accessed via querying stem:[tt "this"] or directly if it is in the same scope.
+
+```nx
+let a = 42 # Static variable
+
+struct Foo {
+  let x = a        # OK, `a` defined in the top level
+  let y = x        # OK
+  let z = this.y   # Also OK
+  # let b = this.b # => Panic! Recursive field access
+}
+
+extend Foo {
+  let x = 43     # OK, same type
+  # let c = y    # => Panic! Did you mean `this.y`?
+  let c = this.y # OK
+}
+```
+
+== Accessor
+
+Defining a field with stem:[tt "let"] generates a <<_public, public>> <<_getter, getter>> and a public <<_setter, setter>>, collectively referenced to as _accessors_.
+
+Both fragile and threadsafe accessors are implemented for a field, unless a custom getter or setter is implemented.
+
+// TODO: Pointer accessors, e.g. `*ptr.field = 2` -> `T:field=(ptr, 2)`.
+
+Within a containing type's method, stem:[tt "this"] evaluates to an instance of that type.
+A field lookup is only possible on `this`, i.e. it can't be accessed from within a method scope.
+
+```nx
+struct T {
+  let field : Int32 = 0
+
+  def foo() {
+    # field         # Panic! Undeclared variable `field`
+    this.field      # OK, getter
+    this.field = 42 # OK, setter
+  }
+}
+
+T().field
+T().field = 42
+```
+
+A stem:[tt "final"] definition generates a public getter only.
+
+```nx
+struct T {
+  final field : Int32 = 0
+
+  def foo() {
+    this.field
+    # this.field = 42 # Panic! Undeclared method `T:field=`
+  }
+}
+
+T().field
+# T().field = 42 # Panic! Ditto
+```
+
+A special stem:[tt "getter"] defintion generates a public getter and a <<_private, private>> setter.
+
+```nx
+struct T {
+  getter field : Int32 = 0
+
+  def foo() {
+    this.field
+    this.field = 42
+  }
+}
+
+T().field
+# T().field = 42 # Panic! `T.field` is private
+```
+
+== Getter
+
+A _getter_ counts as a declared function implementation.
+
+```nx
+trait Foo {
+  decl foo() : Int32
+}
+
+struct Bar : Foo {
+  let foo : Int32 = 0
+}
+
+Bar().foo
+Bar().foo()
+Bar()~Foo.foo()
+
+struct Baz {
+  let foo : Int32 = 0
+}
+
+Baz().foo
+# Baz().foo() # => Panic! Undeclared `Baz.foo()`
+```
+
+== Setter
+
+A function with name ending with `=` is called a _setter_.
+
+A setter may be called without parentheses, e.g. `obj.field = y` ≡ `obj.field=(y)`.
+
+A stem:[tt "let"] or stem:[tt "getter"] field definition implicitly defines a setter for the field, which may be overriden in a class type only.
+If a field is defined without a setter (i.e. with stem:[tt "final"]), it may still be defined explicitly; it makes little sense for a struct, though, as its stem:[tt "this"] is a read-only copy.
+
+[RATIONALE]
+====
+An assignment almost always implies a copy operation in runtime, so it may be treated as a call.
+Sometimes you want a class to be reactive to its field changes.
+Therefore it would be handy to be able to override class setters.
+====
+
+// A field setter argument value is implicitly assigned to the field _after_ the setter body is evaluated.
+// This effectively allows to access the previous value within a setter, and insures expected behaviour, i.e. if you intention is to set a field on the caller site, it'd always be set to that exact value.
+
+```nx
+class Scheduler {
+  # Could've been defined with `let`,
+  # but for readability purposes
+  # `getter` is preferred here.
+  getter workers : USize
+
+  public reimpl workers=(value) {
+    # Access the previous value.
+    print("Previous value: #{this.workers}")
+
+    # React to the update. Note that `this.workers` value hasn't been updated yet.
+    internal_resize(value)
+
+    # Explicitly update the value.
+    this.workers = value
+  }
+}
+```
+
+// Calling an overriden field setter on a struct would effectively update the field value _after_ the call.
+// Therefore a field setter argument shall always be read-only to preserve the value on the stack.
+
+// ```nx
+// # Implicitly `def foo(final arg : Int32)`.
+// def foo(arg : Int32) {
+//   # arg = 42 # Panic! Can not assign to a read-only argument
+// }
+
+// # Can declare a function argument writeable...
+// reimpl foo(let arg : Int32) {
+//   arg = 42 # OK
+// }
+
+// # But not a setter argument.
+// # def field=(let value : Int32) # Panic! Can not have a writeable argument in a setter
+// ```
+
+=== Special field assignment
+
+A _special field assignment_ `obj.field stem:[AA]= value`, where stem:[AA] is a sequence of operator chars (one of `~%^&++*++-+`) implicitly expands to `obj.field = obj.field stem:[AA] value`, e.g. `x.y += 1` -> `x.y = x.y + 1` and it *can not* be overriden to avoid unexpected behaviour.
+
+.Special field assignment
+====
+```nx
+struct Foo {
+  let bar : Int32
+
+  # If indirect setter overriding was allowed...
+  reimpl bar+=(value) {
+    super(value * 2)
+  }
+}
+
+let foo = Foo({ bar: 0 })
+foo.bar += 1
+foo.bar == 2 # Wut?
+```
+====
+
+== Index accessor
+
+An _index accessor_ implements indexed access behaviour, where an entity is accessed not by its static name, but some runtime value.
+<<_special_field_assignment, Special assignment>> syntax sugar is preserved.
+Index accessors are usually implemented for indexable, e.g. container, types.
+
+.Index setters
+====
+```nx
+class List<T> {
+  decl [](index : SSize) -> T
+  decl []=(index : SSize, value : T) -> T
+}
+
+let list = List([1, 2])
+
+assert(list[0] == list.[](0))
+
+list[0] = 3
+list.[]=(0, 3)
+
+list[0] += 1
+list[0] = list[0] + 1
+```
+====

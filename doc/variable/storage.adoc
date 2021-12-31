@@ -1,0 +1,10 @@
+= Variable storage
+
+A variable has _storage_.
+An on-stack variable is _local_, accessing it is threadsafe.
+A _static_ variable is defined in the top-level or <<_unit, unit>> scope, or with an explicit stem:[tt "static"] modifier; accessing it is fragile.
+A class field has _instance storage_, and its access is fragile as well.
+
+A pointer to a variable respects its writeability and storage.
+A class field pointer has undefined storage, because the class instance may eventually die.
+See <<_pointer>>.

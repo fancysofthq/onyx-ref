@@ -1,0 +1,51 @@
+= Literal
+
+A _literal_ is a hard-coded value, e.g. `42` or `"foo"`.
+
+When used in runtime, a literal creates an instance of inferred or restricted type.
+
+```nx
+let x = 42           # : Int32
+let x = 42f          # : Float64
+let x : Float64 = 42 # : Float64
+
+def foo(arg : Float64) -> arg : Float64
+assert(foo(42) == foo(42f))
+```
+
+A literal may also be used as a template argument.
+The template argument may then be used as if it was a real literal.
+Only `\Int`, `\UInt`, `\Bool`, `\String` and enum (see <<_enum_template_argument>>) may be used as a literal restriction.
+
+```nx
+struct Foo<L ~ \UInt> {
+  def foo() -> L
+}
+
+assert(Foo<42>().foo() == 42 : UInt32)
+```
+
+== Literal suffix
+
+A literal may have a _literal suffix_ to narrow the resulting type.
+For example, `42 : Float64` is legal, but `42i : Float64` is not: the latter is narrowed to be an integer.
+
+== Magic literal
+
+A _magic literal_ (a term borrowed from Ruby) begins with `%`.
+
+An <<_array, array>> or <<_tensor, tensor>> magic literal only contains literal values, which allows to get rid of commas, and to append an underlying type <<_literal_suffix, suffix>>.
+
+If the very first value of an array magic literal is an alpha character, then it's deemed to be a `String` array (it can be enforced with a `s` suffix).
+The `c` suffix would make it an array of `Char` instead.
+
+```nx
+%[hello world] : String[2]
+%[hello world]c : Char[11]
+```
+
+A magic literal wrapped in parentheses or brackets is deemed to be a single `String` literal allowing double quotes within.
+
+```nx
+%("Hello, world") == %{"Hello, world"} |== %<"Hello, world"> : String
+```

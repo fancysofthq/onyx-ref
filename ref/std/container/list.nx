@@ -1,0 +1,106 @@
+import CapacityError from "./capacity_error.nx"
+import { log2 } from "../math.nx"
+import Indexable from "../../indexable.nx"
+import Endful from "../../endful.nx"
+import Enumerable from "../../enumerable.nx"
+import Mappable from "../../mappable.nx"
+import * as Mem from "../../memory.nx"
+
+# A growing random-access list.
+export default class List<Type: T> : [
+  Indexable<USize, T>,
+  Endful<T>,
+  Enumerable<T>,
+  Mappable<T>
+] {
+  private let pointer : T*
+  getter capacity, size = 0u
+
+  static def self(capacity = 0u) -> {
+    if (capacity > 0) {
+      final capacity = log2(capacity).ceil()
+      final pointer = Mem.allocate<T>(capacity)
+      return self({ pointer, capacity })
+    } else {
+      return self({ pointer: unsafe! uninitialized T* })
+    }
+  }
+
+  def resize!(new_capacity) -> {
+    min_capacity = log2(new_capacity).ceil()
+
+    if (min_capacity > this.capacity) {
+      this.pointer = Mem.realloc(this.pointer, min_capacity)
+      this.capacity = min_capacity
+    } else if (min_capacity < this.capacity) {
+      if (min_capacity < this.size) then throw CapacityError()
+      this.pointer = Mem.realloc(this.pointer, min_capacity)
+      this.capacity = min_capacity
+    }
+  }
+
+  impl ~Indexable.[](index) -> {
+    if (index >= this.size) then throw IndexError(index)
+    return unsafe! *this.pointer[index]
+  }
+
+  impl ~Indexable.[]?(index) -> {
+    if (index >= this.size) then return void
+    else return unsafe! *this.pointer[index]
+  }
+
+  # The preferable overload always returns a value,
+  # because a list value can not be unset.
+  prefer def []=(index, value) -> T {
+    if (index >= this.size) then throw IndexError(index)
+
+    final old = unsafe! *this.pointer[index]
+    unsafe! @decrc(old)
+
+    *this.pointer[index] = value
+    unsafe! @incrc(value)
+
+    return old
+  }
+
+  impl ~Indexable.[]=(index, value) -> {
+    return T??(this.[]=(index, value) : T)
+  }
+
+  impl ~Endful.push(value) -> {
+    this.resize!(this.size += 1)
+    unsafe! @incrc(value)
+    unsafe! this.pointer[this.size - 1] = value
+  }
+
+  impl ~Endful.pop() -> T {
+    final value = this.pop?()
+    if (!value) then throw IndexError(index)
+    else return value
+  }
+
+  impl ~Endful.pop?() -> T?? {
+    if (this.size == 0) then return void
+    final value = this[this.size - 1]
+    unsafe! @decrc(value)
+    this.resize!(this.size -= 1)
+    return value
+  }
+
+  impl ~(Indexable && Enumerable).each#indexed(yield) => {
+    (0...this.size).each(i => yield(this[i], i))
+  }
+
+  impl ~(Indexable && Mappable).map#indexed(yield) => {
+    final new = self(this.capacity)
+    (0...this.size).each(i => new << yield(this[i], i))
+    return new
+  }
+
+  reimpl eachfield(yield) => this.each(e => yield(e))
+
+  reimpl unsafe finalize() -> {
+    this.eachfield(e => @decrc(e))
+    Mem.free(this.pointer)
+  }
+}

@@ -1,0 +1,124 @@
+[appendix]
+= Standard library
+
+The language Standard defines the _standard library_: a collection of types and functions for *cross-platform* functionality required for a conforming compiler implementation.
+For brewity, the standard library is often referenced to as _stdlib_.
+An stdlib entity must be imported from `"std"`.
+
+The appendix contains the cross-platform <<_standard_library, standard library>> API.
+It is WIP and is soon to be a part of the Standard rather than the Reference.
+
+== Containers
+
+List, Stack, Queue, Deque, Map, Set
+
+== Hashing
+
+XXH, SHA, MD
+
+== Regex
+
+== Streams
+
+== Serialization
+
+== Target-specific libraries
+
+If a compiler claims to be able to target a specific platform, it then shall implement target-specific APIs accessible under a `"target/*"` meta path, e.g. `"target/win32"`.
+
+=== ISA
+
+A conforming compiler implementation targeting certain Instruction Set Architectures must implement ISA-specific set of standardized APIs at `"std/isa/*"`, e.g. `"std/x86"` if it supports X86 processors.
+
+==== X86
+
+x86-specific APIs are located in `"std/isa/x86"`.
+
+=== OS
+
+A conforming compiler implementation targeting certain operating systems must implement OS-specific set of standardized APIs at `"std/os/*"`, e.g. `"std/win32"` if it supports Windows programs.
+
+==== POSIX
+
+POSIX-specific APIs are located in `"std/os/posix"`.
+
+To avoid bloat, a POSIX-compilant OS API doesn't expose POSIX functionality, but only a distinct set of features for that OS.
+For example, `"std/os/linux"` won't expose `Signal`, as it's already located in `"std/os/posix"` when targeting Linux.
+
+```onyx
+# import { Signal } from "std/os/linux" # => Panic!
+import { Signal } from "std/os/posix"   # OK, POSIX functionality implemented for this target
+import { IOUring } from "std/os/linux"  # OK, Linux-specific functionality
+```
+
+==== Linux
+
+Linux-specific APIs are located in `"std/os/linux"`.
+
+NOTE: `"std/os/linux"` doesn't expose POSIX APIs.
+See <<_posix>>.
+
+==== Windows
+
+Win32-specific APIs are located in `"std/os/win32"`.
+
+// == I/O
+
+// Stdlib provides convenient Input/Output mechanisms.
+
+// === Streams
+
+// `IStreamable`, `OStreamable` traits along with `IStream`, `OStream` and `IOStream` classes implement streams of binary data which can be read and/or written.
+// Accessing a stream is <<_fragile, fragile>>, but these are classes, so they may use the <<_implicit_class_mutex, implicit class mutex>> when needed.
+
+// The well-known standard OS streams are implemented in form of global variables: `cin : IStream`, `cout : OStream` and `cerr : OStream`.
+
+// .Hello, world
+// ====
+// ```nx
+// import { cout } from "std/io"
+// cout << "Hello, world!\n"
+// ```
+// ====
+
+// Buffers.
+
+// Note about filesystem and networking being OS-dependent.
+
+// == Timespan
+
+// Note about Random absense.
+
+// == Dynamic containers
+
+// `List<T>`, `LinkedList<T>`, `DoublyLinkedList<T>`, `Stack<T>`, `Queue<T>` and `Deque<T>` classes are part of the stdlib.
+
+// TIP: There are no any classes with functionality based on hashing, such as `Map<K, V>`, because it's hard to pick up a standard hashing mechanism.
+
+// == String
+
+// * `String` -- a mutable UTF-8 encoded string, a class.
+
+// Note about Regex absence.
+
+// == Box
+
+// == Lambda
+
+// == Threading
+
+// * `Promise<T>`
+// * `Mutex`
+// * `Condvar`
+// * `Scheduler.async()`
+// * `Scheduler.parallel()`
+// * `Scheduler.await()`
+
+// Note about `ThreadLocal<T>`: no need, put vars in lambda.
+
+// Also no need for `Atomic<T>`, because access is fragile by default.
+// Use `import { fence } from "std"` or `import { Atomic } from "std"`.
+
+// ```nx
+
+// ```

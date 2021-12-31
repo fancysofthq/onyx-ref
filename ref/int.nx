@@ -1,0 +1,35 @@
+import Real from "./real.nx"
+import Stringifyable from "./stringifyable.nx"
+
+export struct Int<
+  Signed: S ~ \Bool,
+  Bitsize: Z ~ \UInt
+> : Real, Stringifyable {
+
+  # TODO: Bitwise arithmetic.
+  # TODO: `decl digits : Iterator<Digit>`?
+
+  decl to<T>() : T
+
+  builtin impl to<String>()
+}
+
+# Convenient unsigned integer aliases.
+#
+
+@[Builtin] export alias Int8 => Int<true, 8>
+@[Builtin] export alias Int16 => Int<true, 16>
+@[Builtin] export alias Int32 => Int<true, 32>
+@[Builtin] export alias Int64 => Int<true, 64>
+
+@[Builtin] export alias UInt8 => Int<false, 8>
+@[Builtin] export alias UInt16 => Int<false, 16>
+@[Builtin] export alias UInt32 => Int<false, 32>
+@[Builtin] export alias UInt64 => Int<false, 64>
+
+# @[Builtin] export alias Bit => UBin<1> # Should be an alias to `Bool` instead?
+@[Builtin] export alias Byte => UInt8
+
+# Target-dependent integer types with bitsize equal to a pointer's.
+@[Builtin] export decl struct SSize;
+@[Builtin] export decl struct USize;

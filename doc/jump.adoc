@@ -1,0 +1,136 @@
+= Jump
+
+A _jump_ statement alters the code execution flow based on some condition.
+
+== `if`
+
+An stem:[tt "if"] statement implements conditional jump.
+It may have zero or more additional stem:[tt "elif"] branches, and at most one stem:[tt "else"] branch.
+
+A branch condition is a runtime expression always wrapped in parentheses.
+A branch condition expression is _falsey_ if it evaluates to either <<_bool, stem:[tt "false"]>>, <<_nil, stem:[tt "nil"]>> or <<_void, stem:[tt "void"]>>; otherwise it's _truthy_.
+
+A branch body must be wrapped in brackets unless it's a single expression.
+A branch body may be optionally delimeted with stem:[tt "then"] for readability, regardless of brackets; stem:[tt "else then"] is illegal.
+
+```onyx
+let x = 42
+
+if (x > 0) { foo() }
+elif (x == 0) then bar()
+else
+  baz()
+```
+
+A variable defined in a condition expression is accessible from within all following branch bodies.
+If a branch condition expression evaluates to a <<_variant, variant>> instance, then the actual variant option is compared.
+
+```onyx
+let var = rand(42, "foo") : Variant<Int32, String>
+
+if (final x = @get?<Int32>(var) : Int32?) {
+  x : Int32
+} else {
+  # final x = @get<String>(var) # => Panic! `x` is already declared
+  final y = @get<String>(var)   # OK, may throw if variant type is changed
+}
+```
+
+== `while`
+
+A stem:[tt "while"] statement implements conditional loops.
+A loop condition is similar to <<_if, if>>'s.
+Similarly, a loop body must be wrapped in brackets unless it's a single expression.
+Also, a loop body may be optionally delimeted with stem:[tt "do"] for readability.
+
+```onyx
+while (cond?()) do_stuff()
+while (cond?()) do { stuff() }
+```
+
+== `switch`
+
+A stem:[tt "switch"] statement jumps based on an integral _switcher_ value.
+
+A stem:[tt "case"] branch condition is not a runtime expression: it doesn't use parentheses, multiple conditions are comma-delimeted and _optionally_ wrapped in square brackets instead.
+
+A switcher may therefore be either:
+
+* An `~ Int` value with numeric literal cases;
+* A <<_enum, enum>> value with enum constant (or symbol) cases;
+* A <<_class, class>> or <<_variant, variant>> instance with actual type cases.
+
+Unlike in C, there is no waterfall in a stem:[tt "switch"] statement.
+Switching is exaustive, but an stem:[tt "else"] branch is allowed.
+A stem:[tt "then"] delimeter is optional akin to such in an <<_if, if>> statement.
+
+.Switching on an integer
+```onyx
+let x = rand(1, 2, 3, 4, 5) : Int32
+
+# Different syntaxes to showcase.
+switch (x) {
+  case 1        foo()
+  case [2] then bar()
+  case 3, 4
+    baz()
+  else {
+    qux()
+  }
+}
+```
+
+.Switching on a enum
+```onyx
+enum Foo {
+  Bar,
+  Baz
+}
+
+switch (rand<Foo>()) {
+  case :bar
+    print("Is Bar")
+  case [Foo::Baz]
+    print("Is Baz")
+}
+```
+
+When switching on a class or variant instance, the switched value stays intact.
+A compiler does not narrow the instance type due to possible access complexities.
+Within a branch body, the switched instance should be cast manually; a compiler may optimize the cast, though.
+
+// TODO: An instance may be inferred to be in-scope hence threadsafe, which would allow narrowing?
+
+.Switching on a class instance
+```onyx
+let animal : Animal = Dog()
+
+switch (animal) {
+  case Dog {
+    @inspect(animal)          # => Animal (intact)
+    # animal~Dog.bark()       # => Panic! Narrowing virtualization is illegal
+    @cast<Dog>(animal).bark() # Manual cast, won't throw (may even be optimized out)
+    animal = Cat()            # Legal
+  }
+  case Dog, Cat {
+    if (let dog = @cast?<Dog>(animal)) {
+      dog.bark()
+    }
+  }
+}
+```
+
+.Switching on a variant instance
+```onyx
+switch (let v = rand(42, "foo")) {
+  case Int32 {
+    @inspect(v)             # => Variant<Int32, String>
+    v = @get<Int32>(v) + 27 # OK, assigning `Int32` is autocast
+  }
+  case String
+    v = @get<String>(v) + "bar"
+  # case 42    # => Panic! Can only switch on a variant type, not its value
+}
+```
+
+TODO: <<_virtualization, Virtual>> case example.

@@ -1,0 +1,4 @@
+import  { UInt32 } from "./int.nx"
+
+# A 4-byte container to fit any Unicode character.
+@[Builtin] export distinct alias Char => UInt32 { }

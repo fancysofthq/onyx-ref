@@ -1,0 +1,12 @@
+= C scope
+
+C entities (functions, types and even literals) are referenced from Onyx code by prepending `$`.
+Multi-word entities are wrapped in backticks, e.g. `++$`unsigned int **`++`.
+
+Builtin C declarations (i.e. those not requiring any ``include``s) are accessible anywhere.
+For example, `$int`, `$char*` etc.
+
+A non-builtin C declaration requires current Onyx source file to either include the header, or to declare the entity explicitly.
+That means, for example, that you have to `extern #include "stdio.h"` or `extern void puts(char*);` in **each** Onyx source file which calls `$puts`.
+
+See <<_example_calling_c_code_from_onyx>>.

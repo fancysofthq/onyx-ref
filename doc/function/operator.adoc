@@ -1,0 +1,46 @@
+= Operator
+
+An _operator_ is a function declaration with identifier containing mathematical symbols.
+
+TODO: Allow Greek and/or Unicode-math symbols?
+
+== Unary operator
+
+An unary operator function identifier consists of a single symbol, one of `~!^-`, and it doesn't accept any arguments.
+An unary operator call may be shortcut as `stem:[@]stem:[a]` stem:[-=] `stem:[a].stem:[@]()`.
+
+```nx
+struct Int {
+  decl -()
+}
+
+-42 == 42.-()
+```
+
+== Binary operator
+
+A binary operator is a function with zero arity and identifier consisting of any sequence of symbols from `++~!%^&*-+=++`.
+
+A binary operator call may be shortcut as `stem:[a] stem:[@] stem:[b]` stem:[-=] `stem:[a].stem:[@](stem:[b])`.
+
+```nx
+struct Int {
+  decl +(another : self)
+}
+
+1 + 2 == 1.+(2)
+```
+
+A binary operator with identifier ending in `=` is illegal, with exceptions for `++<=++`, `++>=++`, `==` and `~=`.
+
+`a != b` automatically expands to `!(a == b)`.
+`===` is the builtin equivalence operator with `!==` counterpart.
+
+// TODO: Get rid of `==<` and `===<`.
+
+It is possible to pass multiple arguments to a binary operator while preserving the sugar via <<_splatting, splatting>>.
+For example, `(0.1 + 0.2) ~= *(0.3, delta: 0.1)` stem:[-=] `(0.1 + 0.2).~=(0.3, delta: 0.1)`.
+
+== Ternary operator
+
+The only ternary operators are the https://en.wikipedia.org/wiki/%3F:[ternary if operator] (`stem:[cond] ? stem:[a] : stem:[b]`), which can not be overriden; and <<_index_setter, index setters>>.

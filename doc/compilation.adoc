@@ -1,0 +1,115 @@
+= Compilation
+
+The whole Onyx program is compiled at once without separating header and source files.
+Source files are cross-referenced by the rules defined in <<_onyx_source_files>> and <<_c_source_files>>.
+
+A compiler _panics_, i.e. halts compilation, if the program is ill-formed.
+The Standard defines panic unique identifiers to aid debugging, e.g. `P001: Undeclared function reference`.
+
+[[meta_path]]
+Meta path::
++
+A _meta path_ is a file path beginning with a seemingly-relative file or directory name, e.g. `"foo.nx"` or `"foo/bar.nx"`, but neither `"./foo.nx"` nor `"/foo/bar.nx"` nor `"C://baz.nx"`.
++
+The way a meta path is resolved is implementation-defined.
+Usually it is resolved by looking up in locations defined by some flags passed to the compiler binary.
++
+TIP: If Onyx packages are stored in some `./onyx_modules` directory, and there is a source file at `./onyx_modules/my_module/main.nx`, the Fancy Onyx compiler would expect an `-i./onyx_modules` flag to make an `import "my_module/main.nx"` directive work.
+
+== Onyx source files
+
+Onyx uses modules mechanism similar to ES6 modules.
+Program entities may be exported using an stem:[tt "export"] directive, and imported using an stem:[tt "import"] directive.
+
+By convention, an Onyx source file has `.nx` extension.
+No extension is suffixed implicitly upon file lookup.
+
+The Standard defines `"std"` and `"std/*"` extension-less meta path family, which are reserved for cross-platform and OS-specific API standard entity implementations, accordingly.
+See <<_std_api>>.
+
+.Modules
+====
+.sum.nx
+```nx
+export default def sum(a, b : Int32) {
+  return a + b
+}
+```
+
+.main.nx
+```nx
+import { out } from "std/term"
+import sum from "./sum.nx"
+out << sum(1, 2)
+```
+
+```sh
+$ fnx ./main.nx
+3
+```
+====
+
+=== Circular imports
+
+Circular imports are allowed in Onyx.
+A compiler jumps back to the file upon detecting an undeclared-yet entity unless dead-loop is detected.
+
+.Circular imports
+====
+.user.nx
+```nx
+import Post from "./post.nx"
+
+export default class User {
+  final posts = List<Post>.new()
+  #                  ^ Jump point
+
+  let name : String
+
+  def top_rated_post() -> Post {
+    #                     ^ Jump point
+
+    let top_rating = 0u
+    let top_index = 0z
+
+    this.posts.each#indexed((p, i) => {
+      if (p.rating > top_rating) {
+        #   ^ Jump point
+
+        top_rating = p.rating
+        top_index = i
+      }
+    })
+
+    return this.posts[top_index]
+  }
+}
+```
+
+.post.nx
+```nx
+import User from "./user.nx"
+
+export default class Post {
+  final author : User
+  #              ^ Jump point
+
+  let rating : UInt32
+
+  def author_name() -> {
+    author.name
+    # ^ Jump point
+  }
+}
+```
+====
+
+== C source files
+
+A file referenced by a C `include` directive within an Onyx stem:[tt "extern"] directive, as well as a file included by a C file, is looked up in a similar fashion as it would be if compiled by a C compiler.
+That said, <<meta_path, meta paths>> are applicable to C files lookup as well.
+
+TIP: The Fancy Onyx compiler makes use of the conventional `-I` flag, e.g. `-I/usr/include` to resolve C paths.
+
+NOTE: The Standard states that using an Onyx compiler binary would neither require to link standard C libraries explicitly nor to provide the system-dependent standard C include paths, unless cross-compiled.
+Therefore, the `-I/usr/include` flag would be implied on a Linux host when using the Fancy Onyx compiler.

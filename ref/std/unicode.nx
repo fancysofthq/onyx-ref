@@ -1,0 +1,12 @@
+extend Char {
+  # Check if this is a valid Unicode character.
+  decl valid?() -> Bool
+}
+
+extend String {
+  # Check if this is a valid Unicode string.
+  decl valid?() -> Bool
+
+  # Get string length in Unicode characters.
+  decl length() -> USize
+}

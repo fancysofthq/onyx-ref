@@ -1,0 +1,92 @@
+= Comments
+
+A comment begins with `#` and spans until the end of the line.
+
+```nx
+# This is a comment.
+some_call() # This is also a comment
+```
+
+A `#` immediately following an identifier is considered a <<_function_tagging, function tag>>; an explicit spacing would be required.
+
+```nx
+list.each#indexed() # A tagged function call, `#` denotes a function tag
+list.each #indexed() `#` begins the comment
+```
+
+== Documentation
+
+Multiple comments without empty lines adjacent to a statement are called _documentation_.
+An annotation application between documentation and statement doesn't break the documentation.
+
+Documentation blocks may be parsed by a documentation generator to generate a user-friendly API documentation.
+
+```nx
+# This is a freestanding comment.
+# It wouldn't be seen in the API docs.
+#
+
+some_call() # This is also a comment which wouldn't be present in the API docs
+
+# This is a documentation block.
+# It would be reflected in API docs.
+@[SomeAnnotation]
+class MyClass {
+  # This is a documentation for the variable,
+  # also seen in the API docs.
+  let foo : String
+}
+```
+
+== Comment intrinsics
+
+TODO: `:ditto:`.
+
+== Comment styling
+
+[RATIONALE]
+====
+Enforcing comment styling increases the quality of Onyx libraries.
+====
+
+A comment should be written in British (`en_gb`) language, but may contain any other Unicode chars for emojis, names, charts etc.
+
+A freestanding comment should always have one empty comment line appended.
+A documentation may or may not have a empty comment line appended.
+
+A non-inline comment should be hard-terminated with an optional sequence of emojis following the terminator.
+An inline comment should not be hard-terminated.
+
+Inline comments in adjacent lines should be aligned to the fartest one.
+If an inline comment hits some pre-defined length limit, it disables the alignment for the whole block of adjacent lines.
+
+Comments support vanilla Markdown styling.
+By default, a code fence block language is Onyx.
+
+.Comment styling
+====
+```nx
+threadsafe! {
+  # This context is threadsafe.
+  #
+
+  x.value += 1          # Implicitly wrapped in class mutex thus slow
+  fragile! x.value += 1 # Fast but not threadsafe
+
+  Atomic.incr(&x) # Increment atomically with sequentially consistent ordering
+  fragile! Atomic.incr<:release>(&x) # Increase atomically with "release" ordering
+}
+```
+
+But this is also valid styling:
+
+```nx
+threadsafe! {
+  # This context is threadsafe. 🤗
+  x.value += 1 # Implicitly wrapped in class mutex thus slow
+  fragile! x.value += 1 # Fast but not threadsafe
+  Atomic.incr(&x) # Increment atomically with sequentially consistent ordering
+  fragile! Atomic.incr<:release>(&x) # Increase atomically with "release" ordering
+}
+```
+====

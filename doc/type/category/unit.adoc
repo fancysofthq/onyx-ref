@@ -1,0 +1,53 @@
+= Unit
+
+A _unit_ type is a singleton object type.
+It always has zero size, and its identifier is its only instance.
+
+A unit member practically has static storage, but it shall be queried as if it was an "instance" member, i.e. via `.`.
+A unit field shall always have its default value set, as it's practically a static variable.
+An "instance" unit member access is always fragile.
+
+A unit member declared with an explicit stem:[tt "static"] modifier may only be statically-accessed, i.e. via `::`.
+
+A unit type defines equivalence operator `===`, which returns stem:[tt "true"] iff the operand is the same unit.
+
+```nx
+unit Unit {
+  let var : Int32 = 0
+
+  def get_var() {
+    return this.var
+  }
+}
+
+threadsafe! {
+  let u = Unit
+  assert(u === Unit)
+
+  fragile! u.var += 1
+  assert(fragile! u.get_var() == 1)
+}
+```
+
+include::./trait.adoc[tag=unit]
+
+== `nil`
+
+stem:[tt "nil"] is the only builtin unit type.
+
+It is one of the three <<_if, falsey>> values in Onyx, along with <<_bool, stem:[tt "false"]>> and <<_void, stem:[tt "void"]>>.
+However, unlike stem:[tt "void"], stem:[tt "nil"] is a unit type, therefore it can be used in runtime, which makes is the God type to-go.
+
+```nx
+extend nil {
+  static antipattern? = true
+}
+
+assert(nil::antipattern?)
+```
+
+A type may be suffixed with `?`, which turns it into a nilable <<_variant, variant>>.
+
+```nx
+assert(User? \:? Variant<User, nil>)
+```

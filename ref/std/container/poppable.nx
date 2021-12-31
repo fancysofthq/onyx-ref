@@ -1,0 +1,4 @@
+export default trait Poppable<T> {
+  decl pop() -> T
+  decl pop?() -> T??
+}

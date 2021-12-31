@@ -1,0 +1,164 @@
+= Function
+
+In Onyx, a _function_ may be _declared_ with a stem:[tt "decl function"] statement.
+A previously declared function may be then _implemented_ using an stem:[tt "impl function"] statement.
+A function declaration or call always requires parentheses, which allows to omit the stem:[tt "function"] keyword.
+It is illegal to implement an underclared yet function.
+
+A function name shall match the following regex: `/++_++?[a-zA-Z][a-zA-Z0-9++_++#]+/` (see <<_function_tagging>>).
+Otherwise a Unicode function name may be wrapped in backticks.
+
+```nx
+# A declaration contains no body.
+decl foo()
+
+# impl bar() { } # => Panic! Undeclared `bar`
+
+impl foo() {
+  return 42
+}
+```
+
+Both declaration and implementation may be _defined_ simultaneously with a stem:[tt "def function"] statement.
+Once again, the stem:[tt "function"] keyword is optional.
+
+```nx
+def foo() {
+  return 42
+}
+```
+
+An _inline function_ may be implemented.
+Instead of a block body, an inline function expects a single expression body, delimeted with `++->++`.
+Also, function body latest expression value is deemed its return value.
+
+```nx
+def foo() -> 42
+```
+
+A block body may also be delimeted with `++->++`.
+In fact, a function prototype should be read as `(stem:[A]) -> stem:[R]`, where stem:[A] is the function's arguments, and stem:[R] is its return type.
+Strictly speaking, a function body is a block or single expression following the function prototype.
+
+include::./function/prototype.adoc[leveloffset=+1]
+include::./function/modifier.adoc[leveloffset=+1]
+include::./function/method.adoc[leveloffset=+1]
+include::./function/operator.adoc[leveloffset=+1]
+
+== Function tagging
+
+A function name may also contain one or more `++#++`-separated _tags_.
+The order of tags doesn't matter.
+A Unicode-named function isn't considered tagged even in the presence of a `++#++` character.
+
+```nx
+def foo() -> {
+  print(42)
+}
+
+def foo#prefixed() -> {
+  print("Prefix")
+  foo()
+}
+
+def foo#suffixed() -> {
+  foo()
+  print("Suffix")
+}
+
+def foo#prefixed#suffixed() -> {
+  foo#prefixed()
+  print("Suffix")
+}
+
+foo#suffixed#prefixed() # -> Prefix␤42␤Suffix
+
+# This function isn't tagged.
+def `Функция#tag` -> { }
+```
+
+== Generator
+
+A function may also accept a _generator_ argument, which defines a block of code to generate upon every invocation.
+The generated code is injected on the caller site, which allows to safely reference outer-scope identifiers.
+
+A single-argument-yielding generator invocation allows to omit parentheses upon the yield.
+
+```nx
+class List<T> {
+  # A function accepting a generator argument called *yield*.
+  # The generator yields a single value of type *T*,
+  # the generated block return value is discarded.
+  # The function itself returns void.
+  def each(yield : (T) => discard) : void -> {
+    (0..this.size).each(i => yield(this[i]))
+  }
+}
+
+final console = GetConsole()
+
+# list.each((e : T) => discard { console.print(e) }) # Too long
+list.each(e => console.print(e))                     # That's better
+
+# Generates code similar to this, with visibility taken care of:
+(0..list.size).each(i => console.print(list[i]))
+```
+
+== Function object
+
+When querying a function specialization, a `Function` object is returned.
+A function object has undefined memory layout, but it certainly can be used in runtime, passed by value and having program-wide lifespan.
+A function object may be called at some later point of time.
+
+```nx
+def sum(a, b : Int32) -> return a + b
+final sum_obj = sum : Function<fragile (a : Int32, b : Int32) -> Int32>
+assert(sum_obj(1, 2) == 3)
+```
+
+ALternatively, a function object may be defined in-place.
+
+```nx
+let sum = (a, b : Int32) -> a + b
+sum(1, 2)
+assert(sum(1, 2) == 3)
+```
+
+A single-argument in-place function declaration may have argument parentheses omitted.
+This also applies to a <<_generator, generator>> invocation and <<_lambda, lambda>> declaration.
+
+```nx
+let func = x -> x * 2
+generator(x => x * 2)       # Can not assign a generator, only pass it
+let lambda = x ~> x * 2     # OK if doesn't have closure
+# let lambda = []x ~> x * 2 # What?
+```
+
+== Out-of-scope declaration
+
+A function may be declared out of the type implementation scope.
+An _actor_ (i.e. the type the function is declared for) may be a type expression, which would only apply the statement if the caller matches the expression.
+
+// TODO: A field out-of-scope definition, e.g. `let Point.x : Float64`?
+
+.Out-of-scope declaration
+====
+```nx
+class List<T> : Enumerable<T>, Indexable<Key: USize, Value: T> {
+  impl ~Enumerable.each(yield) -> {
+    (0..this.size).each(i => yield(this[i]))
+  }
+}
+
+# When a type matches both `Enumerable<V>` and `Indexable<K, V>`,
+# declare a new method `each#indexed` for it.
+forall K, V decl (
+  Enumerable<V> && Indexable<K, V>
+).each#indexed(yield : (K, V) => discard) -> void
+
+# Implement the freshly declared method for a `List` instance.
+forall T impl List.each#indexed(yield) -> {
+  (0..this.size).each(i => yield(this[i], i))
+}
+```
+====

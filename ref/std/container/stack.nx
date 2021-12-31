@@ -1,0 +1,70 @@
+import CapacityError from "./capacity_error.nx"
+import { log2 } from "../math.nx"
+import Endful from "../../endful.nx"
+import * as Mem from "../../memory.nx"
+
+# A LIFO stack.
+#
+# ```
+# final stack = Stack<Int32>()
+# stack.push(1)
+# stack.push(2)
+# assert(stack.pop() == 1)
+# ```
+#
+export default class Stack<T> : Endful<T> {
+  private let pointer : T*
+  getter capacity, size = 0u
+
+  static self(capacity = 0u) -> {
+    if (capacity > 0) {
+      final capacity = log2(capacity).ceil()
+      final pointer = Mem.allocate<T>(capacity)
+      return self({ pointer, capacity })
+    } else {
+      return self({ pointer: unsafe! uninitialized T* })
+    }
+  }
+
+  def resize!(new_capacity) -> {
+    min_capacity = log2(new_capacity).ceil()
+
+    if (min_capacity > this.capacity) {
+      this.pointer = Mem.realloc(this.pointer, min_capacity)
+      this.capacity = min_capacity
+    } else if (min_capacity < this.capacity) {
+      if (min_capacity < this.size) then throw CapacityError()
+      this.pointer = Mem.realloc(this.pointer, min_capacity)
+      this.capacity = min_capacity
+    }
+  }
+
+  impl ~Endful.push(value) -> {
+    this.resize!(this.size += 1)
+    unsafe! @incrc(value)
+    unsafe! this.pointer[this.size - 1] = value
+  }
+
+  impl ~Endful.pop() -> T {
+    final value = this.pop?()
+    if (!value) then throw IndexError(index)
+    else return value
+  }
+
+  impl ~Endful.pop?() -> T?? {
+    if (this.size == 0) then return void
+    final value = this[this.size - 1]
+    unsafe! @decrc(value)
+    this.resize!(this.size -= 1)
+    return value
+  }
+
+  reimpl eachfield(yield) => {
+    (0...this.size).each(i => yield(this[i]))
+  }
+
+  reimpl unsafe finalize() -> {
+    this.eachfield(e => @decrc(e))
+    Mem.free(this.pointer)
+  }
+}

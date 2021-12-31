@@ -1,0 +1,156 @@
+= Function prototype
+
+A function may declare zero or more arguments, which defines its _arity_.
+
+An argument declaration is really a <<_variable, variable>> declaration with multi-assignment, splatting etc. implicitly declared with stem:[tt "let"].
+All arguments therefore are required to have their type concrete and known in advance, or inferred.
+An argument may be declared stem:[tt "final"], which would prohibit its rewriting within the function body.
+
+An argument may have a default value.
+Such an argument can be omitted in a call, which would assign an evaluated default expression result to the argument.
+Another call evaluates the default expression once again and so on.
+
+```nx
+def bind(server : Server, port : UInt16, host: String = "localhost") {
+  print("Listening at #{ options.host }:#{ options.port }...")
+}
+
+bind(server, 6969) # -> Listening at localhost:6969...
+```
+
+An argument type may be a <<_record, record>> type.
+A record type allows default values to be set for its fields.
+
+```nx
+def bind(server : Server, options : { host: String = "localhost", port : UInt16 }) {
+  print("Listening at #{ options.host }:#{ options.port }...")
+}
+
+bind(server, { port: 6969 }) # -> Listening at localhost:6969...
+```
+
+A record argument may also have a default value by itself.
+The actual type may be inferred.
+
+```nx
+def bind(server : Server, options = { host: "localhost", port: 8000 }) {
+  @debug<@typeof(options)>() # => { host : String = "localhost", port : Int32 = 8000 }
+  print("Listening at #{ options.host }:#{ options.port }...")
+}
+
+bind(server)                 # -> Listening at localhost:8000...
+bind(server, { port: 6969 }) # -> Listening at localhost:6969...
+```
+
+A function always has its _return type_ known in advance, either explicitly set or inferred.
+A return type is delimeted with `++->++`.
+A function block body shall follow the return type; otherwise the return type would be deemed the function body.
+
+```nx
+def sum(a, b : Int32) -> Int32 {
+  return a + b
+}
+```
+
+A function may be _overloaded_, i.e. declared for another set of arguments.
+In fact, overloading by an argument name is illegal; you may only overload it by its type.
+Differences in default values presence also counts as an overload.
+A function may also be overloaded with <<_function_storage, storage>> and <<_function_safety, safety>> modifiers.
+
+```nx
+def sum(a, b : Float64) -> Float64 {
+  return a + b
+}
+
+# This is an overload.
+def sum(a, b : Int32) -> Int32 {
+  return a + b
+}
+
+# The function was declared implicitly fragile in the code above.
+# This is a safety modifier overload.
+threadsafe def sum(a, b : Int32) -> Int32 {
+  return a + b
+}
+
+# Storage overload would only work within a type declaration, not in the top level.
+# static def sum(a, b : Int32) -> Int32 # => Panic! A top level function can not
+                                        # => have a `static` modifer.
+```
+
+// A function argument may have an alias label, which is referenced from the caller site (i.e. its public name).
+// Within the function, it'd be referenced by its original name.
+// It is illegal to overload by an argument public name.
+
+// ```nx
+// # Alias is used because `def` is keyword.
+// def invoke(def: _def) {
+//   _def.invoke()
+// }
+
+// invoke(some_def)
+// ```
+
+[[_reimpl]]
+A function may be declared _generic_ by declaring an argument or return value of a <<_template, template>> type in the function prototype.
+A generic function specializes once for each unique combination of its template arguments.
+Delayed <<_macros, macros>> are evaluated during specialization, and template types are concretized.
+If an matching implementation already exists, it can be re-implemented using a stem:[tt "reimpl"] statement.
+
+```nx
+decl sum<T ~ Numeric>(a, b : T) -> T # OK, declarations may repeat
+
+# forall T ~ Float impl sum<T>(a, b : T) -> T # => Panic! Already implemented `sum<Float64>`
+forall T ~ Float reimpl sum<T>(a, b : T) -> T { # OK
+  \{% print "Specialized #{ `T` }" %}
+  return a + b
+}
+
+sum(1, 2)          # No input, because `sum<Int32>` is implemented earlier
+sum(1.0, 2.0)      # => Specialized `sum<Float64>`
+sum<Float64>(1, 2) # Would not specialize `sum<Float64>` again
+```
+
+[[_return_overload]]
+A function may also be overloaded by its return type.
+
+```nx
+def random<T>() : Int32 -> unsafe! $rand() as Int32
+
+def random<T>() : Float64  -> {
+  unsafe! (($rand() as $double) / ($RAND_MAX as $double)) as Float64
+}
+
+# let rand = random()           # => Panic! Ambuguity
+let rand_f = random() : Float64 # OK
+let rand_i : Int32 = random()   # OK
+```
+
+== Unsplatting
+
+An argument may be _unsplatted_ by prefixing its name with `*` during the declaration.
+The argument would become a single tuple with each element matching the restriction (if any).
+Also see <<_splatting>>.
+
+// TODO: Unsplatting records example?
+
+```onyx
+def foo<T>(*arg : T) -> @inspect<@typeof(arg)>()
+foo<A>(a)    # => A
+foo<A>(a, a) # => (A, A)
+
+def bar<*T>(arg : T) -> @inspect<@typeof(arg)>()
+bar<A>(a)            # => A
+# bar<A, B>(a, b)    # Panic!
+bar<A, B>((a, b))    # => (A, B)
+
+def baz<*T>(*arg : T) -> @inspect<@typeof(arg)>()
+baz<A>(a)                 # => A
+baz<A>(a, a)              # => (A, A)
+baz<A, B>((a, b))         # => (A, B)
+baz<A, B>((a, b), (a, b)) # => ((A, B), (A, B))
+
+# Would expand to `arg : A, B`, which doesn't make sense.
+# def qux<*T>(arg : *T); # Panic!
+# TODO: qux<Int32, String>(42, "Foo")
+```

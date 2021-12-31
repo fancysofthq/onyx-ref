@@ -1,0 +1,51 @@
+= Function modifier
+
+A function may be declared with a _modifier_.
+When any function modifier is present, a function is implicitly defined, which allows to omit the stem:[tt "def"] keyword, e.g. `static self() ++->++ self({ })`.
+
+== Function storage
+
+A function <<_storage, storage>> default depends on the declaration scope.
+A top-level function implicitly has static storage.
+Any other function declaration would have an instance storage, i.e. be a _method_ (with an exception for a method declared within a <<_unit, unit>> type: it'd have some interim storage, practically static).
+To declare an explicitly static function, a stem:[tt "static"] modifier should be used.
+A function may be overloaded by storage.
+
+```nx
+class Foo {
+  # An explicitly static function.
+  static def bar() -> 42
+
+  # An implicitly instance function, i.e. method.
+  def bar() -> 43
+}
+
+final foo = Foo()
+assert(foo::bar() != foo.bar())
+```
+
+== Function safety
+
+TODO: Can overload by safety, fragile by default.
+
+== Function visibility
+
+By default, a declared function is publicly accessible.
+To declare a function which is only accessible within the declaration scope (e.g. a type implementation), use an explicit stem:[tt "private"] visibitility modifier.
+A function shall not be overloaded by visibitility; the only exception is the private `self` constructor implicitly defined for a class.
+A private function can not be accessed by any means; the only workaround would be to declare a public proxy function.
+
+```nx
+class Foo {
+  private def bar() -> 42
+}
+
+final foo = Foo()
+
+# foo.bar() # Panic! `Foo.bar` is private
+
+# Define a proxy method.
+def Foo.get_bar() -> bar()
+
+assert(foo.get_bar() == 42) # OK
+```

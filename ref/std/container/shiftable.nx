@@ -1,0 +1,4 @@
+export default trait Shiftable<Type: T> {
+  decl shift() -> T
+  decl shift?() -> T??
+}

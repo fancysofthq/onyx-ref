@@ -1,0 +1,10 @@
+export enum Storage {
+  Undefined,
+  Local,
+  Instance,
+  Static
+}
+
+export default struct Pointer<Type: T, Storage: S ~ \Storage, Writeable: W ~ \Bool> {
+  let this : self
+}

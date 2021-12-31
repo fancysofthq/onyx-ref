@@ -1,0 +1,23 @@
+= Struct
+
+A _struct_ is an ergonomic alternative to a to distinct <<_record, record>> alias.
+Akin to record, a struct is passed by value.
+
+A default public struct constructor accepts a <<_record, record>> containing the struct's fields, or zero args if the record is empty.
+
+```nx
+struct Point {
+  let x, y = 0f
+  static zero() -> self()
+}
+
+assert(
+  Point({ x: 0, y: 0 }) ===
+  Point({ }) |==
+  Point() |==
+  Point::zero())
+```
+
+A struct type may inherit another struct or trait.
+
+include::../../scope.adoc[tag=struct_pointer_call]

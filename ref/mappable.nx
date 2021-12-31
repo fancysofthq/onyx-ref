@@ -1,0 +1,14 @@
+export default trait Mappable<Type: T> {
+  decl map<U>(yield : T => U ~ Mappable<U>
+  decl map!<U>(yield : T => U) : void
+}
+
+import Indexable from "./indexable.nx"
+
+forall [K, V] extend Indexable<K, V> && Mappable<V> {
+  decl ~Mappable.map#indexed(yield : (key : K, element : V) => U) ~ Mappable<U>
+  impl ~Mappable.map(yield) => this.map#indexed((k, v) => yield(v))
+
+  decl ~Mappable.map!#indexed(yield : (key : K, element : V) => U) : void
+  impl ~Mappable.map!(yield) => this.map!#indexed((k, v) => yield(v))
+}

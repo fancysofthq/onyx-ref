@@ -1,0 +1,90 @@
+= Onyx Programming Language Reference
+:stem:
+:toc: left
+:toclevels: 2
+:sectnums:
+:sectlinks:
+:icons: font
+:xrefstyle: full
+Vlad Faust <vlad@fancysoft.xyz>
+v0.2.0, December 31, 2021
+
+[preface]
+== Foreword
+
+The following document is a non-official (i.e. not governed by the Onyx Software Foundation) Onyx programming language reference (the _Reference_).
+
+The Reference is meant for the Onyx programming language end-users, i.e. those willing to commit themselves into development of programms written in Onyx.
+The Reference is technical, but it may use informal language and also contain explainations, rationale and repetitions where needed.
+
+The Reference is maintained by Fancy Software, the company behind the Fancy Onyx compiler.
+See the source code at https://github.com/fancysofthq/onyx-ref[GitHub].
+You can also reach https://twitter.com/fancysoft[@fancysoft] and https://twitter.com/vladfaust[@vladfaust] on Twitter for feedback.
+
+=== The Onyx programming language
+
+_Onyx_ is a general purpose computer programming language inspired by C++ and Ruby.
+
+Programs written in Onyx are designed to be executed on modern hardware.
+At the moment of writing, these are classic-processor computers running mainstream operating systems, such as Windows, OSX, Linux, iOS and Android.
+
+Onyx assumes presence of vital modern components such as MCU and FPU on a target machine.
+Once the technology evolves in order so that another component is considered vital (e.g. NPU or QPU), the language shall be updated to reflect the evolution.
+
+Still, Onyx is fit in most exotic environments, such as bare metal.
+The language features low-level functionality such as pointer arithmetic and easy C ABI interaction; these are often marked unsafe and require explicit transferring of responsibility from a compiler to the programmer themselves.
+Wrapping the low-level code into safer APIs allows to perform efficiently while staying on the higher level.
+
+==== Design principles
+
+Onyx defines (but not enforces) the following design priniciples.
+
+Inferring as much as possible::
+The language is tolerant to omitted modifiers, type restrictions and repretetions; these are often inferred unless ambigous or unclear from the context.
+
+Reusing concepts::
+Reusing concepts to be aware of dramatically flattens the learning curve.
+The principle is applicable to each aspect of the language.
+
+Lesser implicitness::
+Fewer implicit conversions; fewer defaults.
+An entity should convey its intentions in its fullness, i.e. clear naming is preferable over short naming.
+
+Greater maintainability::
+TODO: `Int256` vs. `superlong`, virtual types etc.
+
+=== Reference conventions
+
+Compiler::
+The Standard doesn't mandate whether Onyx is a statically- or dynamically-compiled language.
+It is designed to fit both scenarios.
+A binary application able to run programs written in Onyx is referenced to as a _compiler_ for brewity.
+In shell code examples, `fnx` implies the Fancy Onyx compiler.
+
+A compile-time output (e.g. panics or macros) is denoted with `++=>++`, e.g. `# ++=>++ Panic! Undeclared variable`.
+Runtime output is denoted with `++->++`, e.g. `# ++->++ Hello, world!`.
+
+=== Current state
+
+The Reference is WIP, its development is aligned to the https://github.com/fancysofthq/fnx[Fancy Onyx compiler].
+Most concepts are stabilized.
+Builtin and standard libraries aren't complete yet, though, their usage in examples is mostly for demonstration purposes.
+
+Currently, the Reference may be _too_ dry and technical, i.e. more of a specification rather than a user-friendly reference.
+This will change over time.
+
+include::./compilation.adoc[leveloffset=+1]
+include::./comments.adoc[leveloffset=+1]
+include::./scope.adoc[leveloffset=+1]
+include::./type.adoc[leveloffset=+1]
+include::./builtin.adoc[leveloffset=+1]
+include::./literal.adoc[leveloffset=+1]
+include::./variable.adoc[leveloffset=+1]
+include::./jump.adoc[leveloffset=+1]
+include::./function.adoc[leveloffset=+1]
+include::./exception.adoc[leveloffset=+1]
+include::./macros.adoc[leveloffset=+1]
+include::./interop.adoc[leveloffset=+1]
+include::./intrinsics.adoc[leveloffset=+1]
+include::./macros-api.adoc[leveloffset=+1]
+include::./stdlib.adoc[leveloffset=+1]

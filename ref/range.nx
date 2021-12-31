@@ -1,0 +1,20 @@
+import Enumerable from "./enumerable.nx"
+
+export default struct Range<T> : Enumerable<T> {
+  let begin, end : T
+
+  static self(begin, end) -> self({ begin, end })
+
+  def step(current : T) -> T {
+    # TODO:
+  }
+
+  impl ~Enumerable.each(yield) -> {
+    let current = this.begin()
+
+    while (current != this.end()) {
+      yield(current)
+      current = this.step(current)
+    }
+  }
+}

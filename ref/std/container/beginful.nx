@@ -1,0 +1,7 @@
+import Unshiftable from "./unshiftable.nx"
+import Shiftable from "./shiftable.nx"
+
+export default trait Beginful<Type: T> : [
+  Unshiftable<T>,
+  Shiftable<T>
+] { }

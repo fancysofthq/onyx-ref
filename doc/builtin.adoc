@@ -1,0 +1,17 @@
+= Builtin type
+
+A _builtin type_ doesn't require explicit <<_onyx_source_files, importing>>, i.e. is always globally accessible; it is also likely to have a literal.
+
+Following the general design principles of Onyx, FPU and MCU presence is assumed for a target machine.
+Therefore, builtin types include those relying on floating point, vector and dynamic memory access operations.
+
+This section gives an overview of the builtin types.
+
+include::./builtin/utility.adoc[leveloffset=+1]
+include::./builtin/numbers.adoc[leveloffset=+1]
+include::./builtin/pointer.adoc[leveloffset=+1]
+include::./builtin/string.adoc[leveloffset=+1]
+include::./builtin/containers.adoc[leveloffset=+1]
+include::./builtin/variant.adoc[leveloffset=+1]
+include::./builtin/atomic.adoc[leveloffset=+1]
+include::./builtin/lambda.adoc[leveloffset=+1]

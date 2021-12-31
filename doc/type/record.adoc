@@ -1,0 +1,111 @@
+= Record
+
+A _record_ is a non-empty stack-allocated collection of named heterogeneous elements, accessible as _fields_.
+A record type stem:[R] defines a public constructor which accepts an stem:[R] instance with fields passed by their names.
+Also, `Record<stem:[R]> : stem:[R]`.
+
+A record field definition is implicitly stem:[tt "let"] by default.
+A stem:[tt "final"] field can not be modified after record instantiation.
+See <<_field>>.
+
+```onyx
+let rekord = { x: 1, final y: 2 } :
+  Record<{ let x : Int32, final y : Int32 }> :
+  { x, final y : Int32 }
+
+assert(rekord.x == 1)
+rekord.x = 3
+assert(rekord.x == 3)
+
+assert(rekord.y == 2)
+# rekord.y = 4 # => Panic! Can not modify final field `rekord.y`
+```
+
+If a record field stem:[x] has a default value, then it may be omitted in the constructor record.
+A record type which has default values set for all of its fields also defines a zero arity constructor.
+A default value is not a part of the record prototype, i.e. `{ stem:[x] : stem:[tau] = stem:[a] }` stem:[-=] `{ stem:[x] : stem:[tau] = stem:[b] }` stem:[-=] `{ stem:[x] : stem:[tau] }`.
+The _nearest_ default value is applied upon construction.
+
+A record type may be <<_alias, aliased>>.
+Recursive aliasing is not allowed unless it's a recursive pointer, e.g. `alias Node ++=>++ { parent : Node* }`.
+
+A record defines the _equality operator_ `===` which returns `true` if all of its fields are equal to the operand's.
+`!==` returns `true` if any of the fields aren't equal.
+`|===` is similar to `===`, but returns a copy of self if equal, useful in long assertions.
+// TODO: `assert(false === false |=== true)`.
+
+```onyx
+alias Point => { x, y : Int32 = 0 }
+
+assert(
+  Point({ x: 0, y: 0}) ===
+  Point({ x: 0 }) |===
+  Point({ }) |===
+  Point())
+
+assert(Point() !== Point({ x: 1 })) # `x` aren't equal
+```
+
+To avoid repetition, a freestanding identifier `stem:[i]` expands to `stem:[i]: stem:[i]` in a record.
+
+```onyx
+let x = 17
+final point = Point({ x }) # Shortcut to `Point({ x: x })`
+assert(point.x == 17)
+```
+
+A record type can also be <<_distinct_alias, aliased disinctively>>, which allows its extension and thus inheritance.
+A record fields have undefined order, but an ancestor's field are guaranteed to come earlier.
+This effectively allows to safely upcast a record instance.
+
+TIP: To ensure memory ordering for interoperability, use C structs instead.
+
+For a record type stem:[R] a static function `stem:[R]::stem:[R]` may be oveloaded to implement a custom constructor.
+Inherited fields are available in a constructor record.
+
+A non-identifier stem:[x] (e.g. a call) of type stem:[tau] may be passed to a record constructor anonymously iff the record has stem:[tau] in the list of its ancestors; the ancestor would be initialized with stem:[x] then and merged with other fields in order of appearance in the constructor record (former values are overwritten).
+
+```onyx
+enum Color {
+  Red,
+  Green,
+  Blue
+}
+
+struct Drawable {
+  let color : Color
+}
+
+distinct alias Point => { x, y = 0f } : Drawable {
+  # A custom constructor.
+  static self(x, y, color) -> self({ Drawable({ color }), x, y })
+
+  # A custom method available exclusively for a `Point` instance.
+  def length() -> (this.x ** 2 + this.y ** 2).sqrt()
+}
+
+# let point = Point({ Drawable({ color: :red }), x: 3, y: 4}) # Too long 👎
+let point = Point(3, 4, :red) # Calling the custom constructor 👍
+
+assert(point.color == :red)
+assert(point.length() == 5)
+
+final drawable = point as Drawable # OK, safe
+# point = drawable as Point        # => Panic! Can not safely downcast
+```
+
+A more ergonomic alternative to distinctly aliasing a record type would be defining a freestanding <<_struct, struct>> instead.
+
+[TIP]
+====
+You can also declare method on a simply-<<_type_aliasing, aliased>> record type using an <<_out_of_scope_declaration, out-of-scope declaration>>.
+However, it would declare the method for *all* instances of the record, which is rarely desirable.
+
+```onyx
+alias Point => { x, y : Float64 }
+def Point.length() -> (this.x ** 2 + this.y ** 2).sqrt()
+
+# Do you really want this method for all of the similar records?
+assert({ x: 3 : Float64, y: 4 : Float64 }.length() == 5)
+```
+====

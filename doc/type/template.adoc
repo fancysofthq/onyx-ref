@@ -1,0 +1,112 @@
+= Template type
+
+A type may be declared with _template arguments_, which makes it a _template type_.
+
+A template argument declaration stem:[tau] is accessible within the same scope, and also directly under the type identifier, e.g. `stem:[tt "self"]::stem:[tau]`.
+A template argument may have an alias label, which is referenced from outside.
+
+A data type itself (not an instance) may be compared using _static type comparison_ operators `\:?` and `\~?` which are similar their instance counterparts `:?` and `~?`.
+
+Once declared, a template type should be implemented for a subset of unique combinations of its template arguments.
+
+```nx
+# A template type `T` with `Type` alias.
+decl struct Foo<Type: T>
+
+# Implement for `Int32`.
+impl Foo<Int32> {
+  let x : Int32
+}
+
+# Publicly accessible by the alias.
+assert(Foo<Int32>::Type \:? Int32)
+
+# Implement for `String`, reference by the alias.
+impl Foo<Type: String> {
+  let x : String
+}
+
+assert(Foo<String>::Type \:? String)
+```
+
+A subset of template argument combinations may be implemented using a stem:[tt "forall"] modifier.
+The modifier declares a new list of template arguments which are passed to the template type, optionally wrapped in square brackets.
+
+```nx
+decl struct Foo<T>
+
+forall T impl Foo<T> {
+  let x :  T
+}
+```
+
+Declaration and implementation may be done simultaneously using a stem:[tt "def"] statement, which is often omitted if type category is present.
+When defining a type, the implementation is implicitly _for all_ possible template arguments.
+
+```nx
+struct Foo<T> {
+  let x : T
+}
+```
+
+A template argument may have a restriction, either real or virtual.
+Within a specialization, the argument type would have the restriction applied.
+A compiler panics on a specialization lookup query failure.
+
+```nx
+decl struct Foo<T ~ Real> # Declare for all types matching `~ Real`
+# impl Foo<String> { }    # => Panic! `String` doesn't match `~ Real`
+impl Foo<Int32> { }       # OK
+
+def struct Bar<T ~ Real> { } # Define for all types matching `~ Real`
+Bar<Int32>(42)               # OK
+```
+
+A template argument stem:[tau] declared with a `stem:[tt "forall"] stem:[tau]` modifier wouldn't be accessible from outside of current implementation.
+
+```nx
+forall T decl Foo<Type ~ List<T>>
+
+impl Foo<List<Int32>> {
+  # T                       # => Panic! Undeclared `T`
+  self::Type \: List<Int32> # OK
+}
+
+forall T struct Bar<Type ~ List<T>> {
+  T \: self::Type \: Type \: List<T> # OK
+}
+```
+
+A type is _specialized_ once it's referenced with all its template arguments (if any) specified or inferred.
+Each unique combination of template arguments leads to a distinct type specialization.
+During specialization, <<_macros, delayed macros>> are evaluated within the matching type implementation and its extensions, in order of appearance in source code.
+
+```nx
+struct Foo<T> {
+  \{% puts "Specialized!" %}
+}
+
+Foo<Int32>()  # => Specialized!
+Foo<Int32>()  # (Already specialized)
+Foo<String>() # => Specialized!
+```
+
+Intersecting type implementations are illegal.
+Intersecting <<_extend, extensions>> are legal, though, and would layer up.
+
+```nx
+decl Foo<T>
+forall [T ~ Real] impl Foo<T>;
+# forall [T ~ Int] impl Foo<T>; # Panic! Already implemented for `T ~ Real`
+forall [T ~ Int] extend Foo<T>; # OK
+```
+
+`stem:[tt "self"]` keyword query without template args implies the caller site-defined template args, i.e. "this specialization".
+`stem:[tt "self"]<>` rewrites the template arguments, i.e. "that specialization".
+
+```nx
+def struct Int<Bitsize: Z> {
+  # Implies `def add(another : self<Z>) : self<Z>`.
+  def add(another : self) : self
+}
+```

@@ -1,0 +1,35 @@
+= Type restriction
+
+The _instance type restriction_ operator `:` is used to:
+
+* Declare a variable type, e.g. `let x : stem:[tau]`;
+* Declare a function runtime argument type, e.g. `def foo(arg : stem:[tau])`;
+* Declare a function return type, e.g. `def foo() : stem:[tau]`;
+* Ensure a data type within an expression, e.g. `let x = 42 : Int32`, which also makes the code self-documenting;
+* Narrow down a <<_return_overload, return-overloaded>> function, e.g. `42.to() : String`;
+* Declare the list of a type ancestors, e.g. `class Cow : [Animal, Cattle]` (see <<_inheritance>>).
+
+A runtime data type must always be _concerete_, i.e. have a real type defined.
+In contrary, a template argument may *only* be virtually restricted.
+
+For convenience, a function argument is allowed to have an imaginary type restriction.
+An anonymous template argument is implied in this case, i.e. `def foo(arg ~ stem:[upsilon])` stem:[-=] `def foo<T ~ stem:[upsilon]>(arg : T)`.
+
+In addition to `~?`, a real data type may be compared using the _real comparison_ operator `:?`.
+In fact, it accepts a complex type, e.g. `x :? stem:[tau]~stem:[upsilon]`, but the virtual part may be omitted.
+The operation evaluates to a boolean literal.
+A compiler also takes the comparison in consideration, narrowing the type if it is a case branch comparison, for example.
+
+```nx
+def foo(arg ~ Real) {
+  if (arg :? Int32) {
+    print("Is Int32")
+    arg : Int32~Int32 # OK, narrowed down
+  }
+
+  @debug<@typeof(arg)>()
+}
+
+foo(69)   # -> Is Int64
+foo(42.0) # => Float64~Real
+```

@@ -1,0 +1,6 @@
+import Hypercomplex from "./hypercomplex.nx"
+
+# A complex number.
+export default distinct alias Complex<Base: B> => Hypercomplex<B, 1> {
+
+}

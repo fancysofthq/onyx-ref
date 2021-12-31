@@ -1,0 +1,9 @@
+import Real from "./real.nx"
+import Numeric from "./numeric.nx"
+
+# Layout as *D* sequential instances of *B*.
+# TODO: Both *D* and *Dims* acceptable for auto-linking args.
+export default struct Hypercomplex<Base: B ~ Real, Dims: D ~ \UInt> : Numeric {
+  let this : self
+  decl add(other : self) : self
+}

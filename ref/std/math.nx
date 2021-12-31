@@ -1,0 +1,14 @@
+extern #include <math.h>
+
+export log2<T ~ Float>(value ~ T) -> T {
+  \{% if `T` == `Float32` %}
+    return unsafe! $log2f(value as $float) as Float32
+  \{% elsif `T` == `Float64` %}
+    return unsafe! $log2(value as $double) as Float64
+  \{% elsif `T` == `Float128` %}
+    # `` $`long double` `` may not be directly cast to `Float128`.
+    return unsafe! Float128($log2l(value.to<$`long double`>()))
+  \{% else %}
+    \{% raise "Unsupported argument type #{ `T` } for `log2`" %}
+  \{% end %}
+}

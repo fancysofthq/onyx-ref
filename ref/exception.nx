@@ -1,0 +1,26 @@
+import String from "./string.nx"
+import List from "./std/list.nx"
+import { USize } from "./int.nx"
+
+struct Location {
+  final path : String
+  final row : USize
+  final column : USize
+}
+
+# An `Exception` may be thrown.
+# Upon a `throw`, the throw source code location
+# is appended to the exception's backtrace.
+export default class Exception {
+  # The exception message.
+  final message : String? = nil
+
+  # This implementation uses a list to store backtrace.
+  private final backtrace = List<Location>()
+
+  # Create a new exception with optional message.
+  static self(message = nil) -> self({ message })
+
+  # Yield the backtrace one-by-one.
+  def trace(yield : Location => discard) -> backtrace.each(e => yield(e))
+}

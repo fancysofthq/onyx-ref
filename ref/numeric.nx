@@ -1,0 +1,17 @@
+import Exception from "./exception.nx"
+
+# The numeric underflow exception.
+export class Underflow : Exception {
+  static self() -> self({ Exception("Numeric underflow") })
+}
+
+# The numeric overflow exception.
+export class Overflow : Exception {
+  static self() -> self({ Exception("Numeric overflow") })
+}
+
+
+# The trait common for all numeric types.
+export default trait Numeric {
+
+}

@@ -1,0 +1,10 @@
+export default class Lambda<[Closure: C ~ Record](Args: *A) ~> Return: R> {
+  let this : self # Builtin special recursion
+
+  # `Lambda<[](Int32, Int32)>((a, b) ~> a + b)`.
+  static self(this : self) -> self({ this })
+
+  def self(*A) -> R {
+    # Call it.
+  }
+}

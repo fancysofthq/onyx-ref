@@ -1,0 +1,7 @@
+import Pushable from "./pushable.nx"
+import Poppable from "./poppable.nx"
+
+export default trait Endful<Type: T> : [
+  Pushable<T>,
+  Poppable<T>
+] { }

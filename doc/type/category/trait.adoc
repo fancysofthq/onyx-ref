@@ -1,0 +1,46 @@
+= Trait
+
+A _trait_ type defines _behaviour_ of a deriving type, i.e. its methods; it doesn't define fields.
+
+A trait member storage is defined by a deriving type.
+However, it can be declared with an explicit stem:[tt "static"] modifier, which would make the member un-deriveable; only a stem:[tt "static"] variable may be defined in a trait, a field definition is prohibited.
+
+A struct, class, unit or trait type can derive a trait.
+A trait type by itself is incomplete hence can not be used in runtime on its own.
+stem:[tt "this"] within a trait's method evaluates in the context of the deriving type.
+Ditto for stem:[tt "self"].
+
+```onyx
+trait Foo {
+  decl foo()
+
+  def get_foo() -> {
+    return this.foo()
+  }
+}
+```
+
+A trait type may inherit another trait.
+
+// tag::unit[]
+
+A <<_unit, unit>> type may inherit a trait.
+The trait's methods become "instance" methods of the unit type.
+Explicitly stem:[tt "static"] trait members aren't derived.
+
+```nx
+trait Foo {
+  decl foo()
+  def bar() -> this.foo()
+  static def baz() -> "qux"
+}
+
+unit Unit : Foo {
+  impl foo() -> 42
+}
+
+assert(Unit.bar() == 42) # OK
+# Unit::baz()            # Panic! Undeclared `Unit::baz()` (static members aren't derived)
+```
+
+// end::unit[]

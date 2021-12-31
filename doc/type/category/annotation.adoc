@@ -1,0 +1,25 @@
+= Annotation
+
+An _annotation_ type may only be declared, but not implemented.
+Annotations are used in <<_macros, macros>>.
+
+```nx
+annotation MyAnnotation<T ~ \String> # `decl` is implied
+
+@[MyAnnotation<"foo">]
+class User;
+
+\{% nx["User"].annotations[0].type["T"].value == "foo" %}
+```
+
+Application of an annotation type which inherits another annotation applies the inherited annotation to the entity the original annotation is being applied to.
+
+```nx
+annotation Foo<T ~ \String>
+annotation Bar<T ~ \String, U ~ \UInt> : Foo<T>
+
+@[Bar<"baz", 42>] # Also applies `Foo<"baz">`
+class User;
+
+{% print nx["User"].annotations.map(&.type.name).includes?("Foo") %} # => true
+```

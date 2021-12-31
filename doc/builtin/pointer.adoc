@@ -1,0 +1,98 @@
+= Pointer
+
+In Onyx, a `Pointer` type declares template arguments defining the pointee type, the pointer storage and its writeability.
+Safe operations are available for a subset of the pointer type specializations based on latter two.
+
+A `Pointer<Type, Storage, Writeable>` type may shortcut as `Type*stem:[sw]`; where stem:[s] is one of `l` for **l**ocal storage, `s` for **s**tatic storage, or `u` or empty for **u**ndefined (default) storage; and stem:[w] is either `w` for **w**riteable, or `W` or empty for non-writeable (default).
+For example, `Int32*uW : Int32*`, a non-writeable undefined-storage pointer to `Int32`.
+
+Syntax of taking a pointer at a variable in Onyx is similar to such in C, the `&var` operator is used.
+Taking a pointer at a local or static variable, or a local or static record or struct variable field, returns a pointer with same storage and writeability as the variable.
+A class field pointer has undefined storage, because the class instance may die.
+
+TODO: Casting to safer storage is unsafe.
+
+A pointer may be dereferenced using the `*ptr` operator, also similar to C.
+Assigning a dereferenced pointer copies the pointee value.
+Assigning to a dereferenced writeable pointer rewrites the pointee.
+
+TODO: Dereferencing has safety based on storage.
+Can not store a dereferenced pointee, only use immediately; can not have dereferenced type.
+Special assignment, `*ptr.field = 42` ≡ `T:field=(ptr, 42)`; see "field".
+
+```nx
+let x = 42
+final ptr = &x : Pointer<Int32, "local", true> : Int32*lw
+
+*ptr = 43      # Rewrite the pointee data, threadsafe
+final y = *ptr # Copy the pointee data, also threadsafe
+
+assert(y == 43)
+```
+
+== Pointer storage
+
+A pointer storage may be one of `"local"`, `"static"` or `"undefined"`.
+
+A _local pointer_ points at the program stack.
+Dereferencing a local pointer is threadsafe, but you can not pass it outside of the stack, i.e. assign it to a class field or to a static variable.
+
+A _static pointer_ is located elsewhere, but is guaranteed to be accessible with at least fragile-level safety for the whole lifespan of the program.
+Dereferencing a static pointer is fragile, but it can be passed around safely.
+
+Dereferencing a pointer with undefined storage is unsafe, because it gives zero guarantees about memory placement and availability.
+An _undefined pointer_ can be passed around safely; all other storages can be safely cast to an undefined.
+
+TODO: Add _instance_ storage.
+
+== Pointer autocasting
+
+When assigned, a pointer may be safely autocast in accordance with <<_table_pointer_storage_autocasting>>.
+The writeability modifer can also be autocast to false.
+For example, a read-only static pointer can not be safely cast to a writeable local pointer.
+
+TODO: Explicit casting vs. passing as an argument (e.g. can pass instance as local arg).
+
+NOTE: The "instance" storage is yet to be documented.
+
+.Pointer storage autocasting
+[[_table_pointer_storage_autocasting]]
+[cols="1, 1, 1, 1, 1, 1, 1"]
+|===
+| Storage | To `"local"` | To `"instance"` | To `"static"` | To `"undefined"` | Outer scope? | Dereferencing
+
+| `"local"`
+| N/A
+| Unsafe
+| Unsafe
+| Threadsafe
+| No
+| Threadsafe
+
+| `"instance"`
+| Unsafe
+| N/A
+| Unsafe
+| Threadsafe
+| No
+| Fragile
+
+| `"static"`
+| Unsafe
+| Threadsafe conum:1[]
+| N/A
+| Threadsafe
+| Yes
+| Fragile
+
+| `"undefined"`
+| Unsafe
+| Unsafe
+| Unsafe
+| N/A
+| Yes
+| Unsafe
+|===
+conum:1[] Static storage contains instance storage.
+
+A class instance can be safely cast to a read-only stem:[tt"void"] pointer with `"undefined"` storage, suitable for <<_interop, interoperability>>.

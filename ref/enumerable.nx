@@ -1,0 +1,10 @@
+export default trait Enumerable<Type: T> {
+  decl each(yield : T => discard) -> void
+}
+
+import Indexable from "./indexable.nx"
+
+forall [K, V] extend Indexable<K, V> && Enumerable<V> {
+  decl ~Enumerable.each#indexed(yield : (key : K, element : V) => discard) -> void
+  impl ~Enumerable.each(yield) -> this.each#indexed((k ,v) => yield(v))
+}

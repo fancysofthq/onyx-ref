@@ -1,0 +1,59 @@
+= Macros
+
+In Onyx, a _macro_ is code evaluated during program compilation.
+Currently, macros are written in embedded Ruby.
+
+There are two categories of macros:
+
+  * Emitting and non-emitting;
+  * Immediate and postponed.
+
+An emitting macro emits its result into source code, it's wrapped in `{{ }}`.
+A non-emitting macro doesn't, it is wrapped in `{% %}`.
+An immediate macro is evaluated as soon as it's encountered in source code.
+A postponed macro is evaluated at some later point of compilation, usually a specialization; it looks like it's escaped, e.g. `\{% %}`.
+
+.Basic macros
+====
+```nx
+{% %w[hello world].each do |s| %} # A non-emitting immediate macro
+  print({{ s.stringify }})        # An emitting immediate macro
+{% end %}                         # A non-emitting immediate macro again
+```
+
+After macro evaluation the code would look like this:
+
+```nx
+ # A non-emitting macro
+  print("hello")        # An emitting macro
+  print("world")        # An emitting macro
+                         # A non-emitting immediate macro again
+```
+====
+
+Macros include API to access and manipulate the AST and the process of compilation.
+By default, the macros context is isolated, and there is limited access to the system.
+A compiler may provide a way to enable grained permissions, e.g. network access to a certain domain.
+See <<_macros_api>>.
+
+.Pinging from a macro
+====
+```onyx
+print("example.com is " + {%
+  if Net::Ping::External.new("example.com").ping?
+    print("Ping success")     # Print during compilation
+    nx.emit(%Q["reacheable"]) # Emits source code
+  else
+    print("Ping failure")
+    nx.emit(%Q["unreacheable"])
+  end
+%})
+```
+
+```sh
+$ fnx main.nx -m.net=example.com
+Ping success
+$ ./main
+example.com is reacheable
+```
+====

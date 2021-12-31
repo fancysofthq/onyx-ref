@@ -1,0 +1,186 @@
+= Class
+
+A _class_ instance is a <<_record, record>> residing in a non-stack memory with automatic <<_gc, garbage collection>>.
+
+Unlike struct or record, a stem:[tt "final"] class instance still allows its fields to be modified.
+
+A class doesn't have a public constructor implicitly defined, only a private one.
+A class constructor is the only case when <<_function_visibility, visibility overloading>> is legal.
+However, if a class doesn't contain any fields, a zero-arity public constructor is defined.
+
+```onyx
+class Dog {
+  let name : String
+  static self(name) -> self({ name }) # Shall define a public constructor explicitly
+}
+
+final spot = Dog("Spott") # Oops
+spot.name = "Spot"        # OK. Note that `spot` is a `final` variable,
+                          # but the non-final field can still be written
+```
+
+A class field may be of the same type as the class, i.e. a recursive class field is legal.
+Access to a class field or method is threadsafe unless the instance is passed outside of the stack.
+
+Assigning a class instance is threadsafe and copies it by reference.
+An implicitly defined class _equality_ operator `===` would return `true` if both operands point to the same memory region.
+
+```onyx
+extend Dog {
+  # Define a custom equavalence operator.
+  def ==(another : Dog) -> this.name == another.name
+}
+
+final spot_copy = spot
+assert(spot === spot_copy) # Both equivalent...
+assert(spot == spot_copy)  # and equal
+
+final another_spot = Dog("Spot")
+assert(spot !== another_spot) # Not equivalent, ...
+assert(spot == another_spot)  # but equal
+
+final mike = Dog("Mike")
+assert(spot !== mike) # Neither equivalent...
+assert(spot != mike)  # nor equal
+```
+
+A class instance is implicitly prefixed with an implementation-defined _class header_.
+Header size and layout are undefined, but shall remain the same for any class instance.
+Commonly a header contains <<_class_hierarchy, RTTI>> and <<_gc, GC>> metadata.
+
+A static class instance may be safely cast to a `void` pointer with static storage.
+A non-static instance pointer would have undefined storage instead.
+The pointer would point at the instance header followed by the record.
+The header offset value may be acquired via macro or stem:[tt "@classoffset"] intrinsic.
+
+== Class hierarchy
+
+A class header contains _runtime type information_, (_RTTI_) which allows to have, for example, an array of class descendants without type erasure.
+
+A class type may inherit another class, struct or trait.
+A class type declared with an stem:[tt "abstract"] modifier is incomplete, i.e. it can not be a variable real type.
+However, it still defines a private constructor to be used in a descendant.
+
+A class instance may be threadsafely upcast to an ancestor class type using the stem:[tt "as"] operator.
+For runtime casting use the stem:[tt "@cast"] intrinsic and its nilable counterpart stem:[tt "@cast?"].
+Based on the class storage, an intrinsic invocation may be threadsafe (for an in-scope class instance) or fragile (all other cases).
+
+Determining a local-only class instance actual type virtualizes it.
+
+```onyx
+abstract class Animal {
+  final intelligence : Float64
+  decl sound() -> String
+}
+
+class Dog : Animal {
+  static self() -> self({ intelligence: 0.3 })
+  def bark() -> "Woof!"
+  impl sound() -> this.bark()
+}
+
+class Cat : Animal {
+  static self() -> self({ intelligence: 0.25 })
+  def meow() -> "Meow!"
+  impl sound() -> this.meow()
+}
+
+let animal : Animal = Dog()       # OK, can autocast
+let animal = Dog() as Animal      # OK, static upcasting is always threadsafe
+let animal = @cast<Animal>(Dog()) # OK, dynamic upcasting as an alternative
+
+let dog = @cast<Dog>(animal)               # May throw if it's not a `Dog` instance, fragile
+let maybe_dog = @cast?<Dog>(animal) : Dog? # Would return `nil` if failed to cast
+
+final animals = List<Animal>()
+animals.push(dog) # OK, can autocast
+
+animals.each(a => {
+  switch (a) {
+    case Dog then @cast<Dog>(a).bark() # Dynamically downcast, fragile
+    case Cat then @cast<Cat>(a).meow() # Ditto
+  }
+
+  a.sound()             # OK, can call a declaration on an abstract ancestor type
+  print(a.intelligence) # Also OK
+})
+```
+
+== GC
+
+The Standard states that a class instance shall be _garbage collected_ (GC), but it doesn't define the precise mechanism.
+To aid the development of a GC implementation, Onyx defines private stem:[tt "finalize"] method and public stem:[tt "eachfield"] <<_generator, generator>> for a record, struct or a class type.
+
+A private stem:[tt "finalize"] method (also known as _destructor_) is called implicitly once a class instance is deemed to be ready for garbage collection, i.e. finalized.
+A class type has stem:[tt "finalize"] method implemented by default; it invokes stem:[tt "finalize"] on _each field_ yielded by an stem:[tt "eachfield"] generator call.
+
+An stem:[tt "eachfield"] generator is implemented implicitly for most of the types.
+By default, it yields each field of the containing type.
+An stem:[tt "eachfield"] call is threadsafe on a local object, otherwise fragile.
+
+An explicit stem:[tt "eachfield"] reimplementation may be required.
+For example, a dynamic array implementation would yield its pointee elements instead.
+
+```nx
+# A dynamic array.
+class List<T> : Enumerable<T> {
+  private pointer : T*
+  getter capacity, size = 0u
+
+  # Yield each element of the list.
+  reimpl eachfield(yield) => this.each(e => yield(e))
+
+  # Destroy the list, decreasing RC of its elements
+  # (see ARC) and then freeing the pointer.
+  reimpl unsafe finalize() -> {
+    this.eachfield(e => @decrc(e))
+    unsafe! $free(this.pointer as void*)
+  }
+}
+```
+
+== ARC
+
+An Onyx compiler may rely on _automated reference counting_ (ARC) to implement garbage collection.
+
+In consideration to this, stem:[tt "@incrc"] and stem:[tt "@decrc"] intrinsics are defined in Onyx to increase or decrease strong reference counter explicitly and recursively, which is useful during <<_interoperation, interoperation>>.
+
+A struct is allowed to have a class field, which implies the need to update the field's reference counter; an intrinsic invocation on a struct would proxy the update to all its class fields, even nested.
+An intrinsic invocation on a struct without any class fields would therefore be noop.
+
+An Onyx library author shall treat *any* compiler as implementing ARC.
+The RC intrinsics are always legal.
+
+.ARC
+====
+In this example, we are passing some Onyx `Database` instance outside, to the C world.
+To keep the instance alive, we're incrementing the RC upon passing it; and decrementing it when the C environment doesn't need the instance anymore.
+See <<_interoperation>>.
+
+```onyx
+extern {
+  // Initialize a *db* instance.
+  void db_init(void* db);
+
+  // Calling this function would destroy the *db* instance.
+  void db_destroy(void* db) {
+    # The Onyx context is implicitly unsafe here.
+    $destroy_db(db); # This is an Onyx call
+  }
+}
+
+def init_db() {
+  let db = Database()
+
+  # NOTE: Taking pointer is safe, it's the C call which is not.
+  unsafe! $db_init(db as void*)
+
+  @incrc(db)
+  return db
+}
+
+unsafe destroy_db(ptr : void*) {
+  @decrc(ptr as Database)
+}
+```
+====

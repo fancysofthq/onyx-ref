@@ -1,0 +1,5 @@
+import String from "./string.nx"
+
+export default trait Stringifyable {
+  decl to<T : String>() : T
+}

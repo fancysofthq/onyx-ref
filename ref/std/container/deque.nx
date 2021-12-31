@@ -1,0 +1,18 @@
+# A double-ended queue.
+#
+# ```
+# final deque = Deque<Int32>()
+#
+# deque.push(1)
+# deque.unshift(2)
+#
+# assert(deque.pop() == 1)
+# assert(deque.shift() == 2)
+# ```
+#
+export default class Deque<Type: T> : [
+  Endful<T>,
+  Beginful<T>
+] : {
+
+}

@@ -1,0 +1,49 @@
+= Safety
+
+It is illegal to call a lower-_safety_ code from within a higher-_safety_ context, unless wrapped in an _explicit safety statement_.
+
+```nx
+# An explicitly fragile block to emphasize (top level is fragile by default).
+fragile! {
+  # $call() # => Panic! Calling C function is unsafe
+
+  unsafe! $call()     # OK, a single C call is explicitly unsafe
+  unsafe! { $call() } # OK, the whole block is explicitly unsafe
+}
+```
+
+== Unsafe
+
+_Unsafe_ is the lowest possible safety level.
+An unsafe scope is similar to a <<_fragile, fragile>> scope in regards to multi-threading, i.e. there are no any ordering guarantees.
+The list of unsafe operations follows.
+
+  * Calling C functions (see <<_interoperability>>);
+  * Unsafe casting with stem:[tt "as"], e.g. `unsafe! 42i as Float64`.
+
+== Fragile
+
+A _fragile_ scope has https://mathworld.wolfram.com/CausalInvariance.html[_causal invariance_], thus undefined memory access ordering.
+Therefore, a fragile code is safe to execute in a single thread, but multi-threaded execution may lead to race condition.
+See <<_atomic, `Atomic`>> for explicit ordering control instruments.
+
+The top level scope is guaranteed to run sequentially thus fragile.
+_Any_ Onyx function definition has fragile safety by default.
+It is legal to <<_function_safety, overload>> a function by its safety; many builtin types have multiple safety overloads.
+
+List of fragile operations:
+
+  * Accessing a non-final static variable or struct field;
+  * Dereferencing a static writeable pointer;
+  * Accessing a class field.
+
+== Threadsafe
+
+A _threadsafe_ context implies that the code may be simultaneously executed from multiple threads.
+Consequentially, in a threadsafe context code implicitly has the strongest ordering guarantees.
+
+List of threadsafe operations:
+
+  * Accessing a local variable or local struct field;
+  * Dereferencing a static readonly pointer;
+  * Dereferencing a pointer with local storage.

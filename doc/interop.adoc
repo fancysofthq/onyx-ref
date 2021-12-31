@@ -1,0 +1,137 @@
+= Interoperability
+
+Onyx features easy two-way interoperation with C code.
+
+== Calling C code from Onyx
+
+A C code may be embedded into an Onyx source file using the `extern` directive.
+A _single_ C expression or an entire block of C code shall follow the keyword.
+
+The C code would be parsed, resulting in C declarations accessible from within the containing Onyx source file.
+See <<_c_scope>>.
+
+.Calling C code from Onyx
+[[_example_calling_c_code_from_onyx]]
+====
+```nx
+extern #include "stdio.h"
+final message = "Hello, world!"
+unsafe! $puts(message.pointer as char*)
+```
+====
+
+[TIP]
+====
+The Fancy Onyx compiler implicitly links `libc` and `libm`, and also automatically looks up for the standard C header directories.
+<<_example_calling_c_code_from_onyx>> would therefore have been compiled simply with:
+
+```sh
+$ fnx main.nx
+$ ./main
+Hello, world!
+```
+====
+
+The example above doesn't require to include the whole header file, however.
+An explicit C function declaration would be enough.
+
+```nx
+extern void puts(char*);
+final message = "Hello, world!"
+unsafe! $puts(message.pointer as char*)
+```
+
+== Calling Onyx code from C
+
+It is possible to call Onyx code from C by doing the exact same thing: prepending `$` to Onyx entities, also wrapped in backticks if needed.
+The entities are implicitly mangled to make the interop work seamlessly.
+Even type inferring works as expected.
+
+.Calling Onyx code from C
+====
+```nx
+def sum<T>(a, b : T) -> a + b
+
+extern {
+  #include "stdio.h"
+
+  void main() {
+    printf("1 + 2 = \d\n", $sum(1, 2));
+  }
+}
+```
+
+Would compile to machine code similar to this:
+
+```llir
+declare void @printf(i8*, ...)
+
+; The actual function name would be mangled.
+define i32 @"__nx::sum<$int>(a:$int,b:$int):$int"(i32 %0, i32 %1) {
+  ; Here goes the generated Onyx code.
+}
+
+define void main() {
+  %0 = call i32 @"__nx::sum<$int>(a:$int,b:$int):$int"(1, 2)
+  call @printf("1 + 2 = \d\n", %0)
+}
+```
+====
+
+== Exporting a C library
+
+The Standard declares that an Onyx compiler shall be able to compile a freestanding C library containing all the code from the `extern` directives contained in Onyx source files referenced by the input file.
+A amalgamation header file may also be compiled in a similar fashion.
+It would replace function definitions in `extern` directives with declarations.
+
+.Exporting a C library
+====
+.main.nx
+```nx
+extern {
+  #include "stdio.h"
+
+  // This function is implemented in Onyx.
+  void print_sum(int a, int b) {
+    printf("\d + \d = \d\n", a, b, $sum(a, b));
+  }
+}
+
+# The Onyx implementation.
+def sum(a, b : $int) -> a + b
+```
+
+```sh
+# Compile the library file
+$ fnx lib ./main.nx -o./onyx.a
+
+# Compile the header file
+$ fnx header ./main.nx -o./onyx.h
+```
+
+This creates two files: library `onyx.a` and header `onyx.h`.
+They may be then used in a pure C environment.
+
+.onyx.h
+```c
+#include "stdio.h"
+
+// This function is implemented in Onyx.
+void print_sum(int a, int b);
+```
+
+.main.c
+```c
+#include "./onyx.h"
+
+int main() {
+  print_sum(1, 2);
+}
+```
+
+```sh
+$ cc onyx.a main.c -o./main
+$ ./main
+$ 1 + 2 = 3
+```
+====

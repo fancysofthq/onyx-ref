@@ -1,0 +1,16 @@
+= Alias
+
+TODO: `alias Foo<T> => Bar<T>`.
+
+== Distinct alias
+
+TODO:
+
+```nx
+distinct alias Foo<T> => Bar<T> {
+  # let x = 42 # Panic! Can not define field for a distinct alias
+}
+
+Foo() as Bar # OK
+# Bar() as Foo # => Panic!
+```

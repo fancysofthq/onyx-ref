@@ -1,0 +1,106 @@
+= Scope
+
+A _scope_ is comprised of _scope members_.
+
+Only an imported or declared in the same file, or a builtin entity identifier may be looked up from within a scope.
+If an identifier is failed to be located in current scope, then the parent scope may be looked up recursively in accordance with rules specific for the scope; for example, an object method can not lookup the object's fields directly.
+Variable shadowing is always prohibited.
+Closures are explicit in Onyx, see <<_lambda>>.
+
+Static scope of a type specialization is queried via the _static lookup_ operator `x::y`.
+An type specialization instance (i.e. an _object_) can be queried for a method via the _prototype lookup_ operator `x:y`; it would require stem:[tt "this"] to be explicitly passed upon a call (see https://en.wikipedia.org/wiki/Uniform_Function_Call_Syntax[UFCS]).
+Alternatively, an object may be queried for its members via the _object lookup_ operator `x.y`.
+
+```onyx
+struct Foo {
+  static def bar() -> 42 # Explicitly static scope of this specialization
+  def baz() -> self::bar # Implicitly instance scope of this specialization
+}
+
+let foo = Foo()
+
+assert(
+  Foo::bar() ==    # Static lookup
+  Foo:baz(foo) |== # Prototype lookup
+  foo.baz()        # Object lookup
+)
+```
+
+An static type specialization member declaration should be accessed using the stem:[tt "self"] keyword, which evaluates to the containing type.
+
+```onyx
+let x = "hello"
+
+struct Foo {
+  static let bar = 42
+
+  def baz() {
+    x               # OK, declared in the file
+    # let x = "bye" # => Panic! Would shadow `x`
+
+    # bar        # => Panic! Undeclared `bar`. Did you mean `self::bar`?
+    let bar = 69 # OK, a function-local variable doesn't shadow
+
+    return self::bar |== Foo::bar # OK, return the static variable
+  }
+}
+
+extend Foo {
+  # static let qux = bar # Panic! Undeclared variable `bar`. Did you mean `self::bar`?
+  static let qux = (Foo::bar |== self::bar) # OK
+
+  static def quux() {
+    # baz() # Panic! Undeclared function `baz`. Did you mean `self::baz`?
+    return Foo::baz() |== self::baz() # OK
+  }
+}
+```
+
+stem:[tt "this"] keyword is used within a type method, which evaluates to the caller instance (or an immutable copy of the caller if it is a struct).
+An instance field can never be directly accessed from a method, only via querying the instance.
+
+```onyx
+struct Foo {
+  let bar = 42
+  let baz = bar + 27      # OK, because in the same scope
+  let baz = this.bar + 27 # Also OK
+
+  def qux() {
+    # bar          # => Panic! Undeclared variable `bar`, did you mean `this.bar`?
+    this.bar       # OK
+    qux()          # OK, defined in this scope
+    this.qux()     # Also OK
+    Foo:qux(this)  # OK (UFCS)
+    self:qux(this) # Ditto
+  }
+}
+```
+
+// tag::struct_pointer_call[]
+
+To make a struct function callable on a struct pointer, you should explicitly define a static function accepting a pointer argument.
+Thanks to https://en.wikipedia.org/wiki/Uniform_Function_Call_Syntax[UFCS], when called on a pointer, the caller would be passed implicitly.
+A getter and setter accepting a struct pointer are implicitly defined for a struct field.
+See <<_field>> and <<_pointer>>.
+
+```onyx
+struct Point {
+  let x = 1f
+
+  static double(ptr : Point*lw) -> {
+    *ptr.x *= 2 # I.e. `Point::x*=(ptr, 2)`, which is implicitly defined
+  }
+}
+
+let point = Point()
+let pointer = &point : Point*lw
+
+pointer->double() # `Point::double(pointer)`
+assert(point.x == 2)
+```
+
+// end::struct_pointer_call[]
+
+include::./scope/safety.adoc[leveloffset=+1]
+include::./scope/visibility.adoc[leveloffset=+1]
+include::./scope/c.adoc[leveloffset=+1]

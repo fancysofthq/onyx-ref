@@ -1,0 +1,8 @@
+export default enum MemoryOrdering {
+  Unordered,
+  Monotonic,
+  Acquire,
+  Release,
+  Acqrel, # Acquire-release
+  Seqcst  # Sequentially consistent
+}

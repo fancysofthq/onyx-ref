@@ -1,0 +1,30 @@
+import * as Memory from "./memory.nx"
+import Stringifyable from "./stringifyable.nx"
+
+export default class String : Stringifyable {
+  private getter pointer : Byte*
+  getter capacity, size = 0u
+
+  def self(capacity = 0u) -> {
+    if (capacity > 0)
+      return self({
+        pointer: Memory.allocate<Byte>(capacity),
+        capacity
+      })
+    else
+      return self({
+        pointer: unsafe! uninitalized Byte*
+      })
+  }
+
+  # Format this with *args*, returning this.
+  # Implicitly calls `.to<String>()` on each arg.
+  decl format<T>(*args : *T) -> self
+  alias %(*args) => format(*args)
+
+  # Append *value* to this, returning this.
+  decl append(value : String) -> self
+  alias <<(*args) => append(*args)
+
+  impl ~Stringifyable.to() -> this
+}

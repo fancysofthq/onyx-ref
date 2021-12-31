@@ -1,0 +1,17 @@
+import Real from "./real.nx"
+
+# A floating point number.
+export struct Float<
+  PrecisionBits ~ \UInt,
+  ExponentBits ~ \UInt
+> : Real {
+  alias EMax => \{{ (2 ** (`ExponentBits`.value - 1) - 1).round }}
+}
+
+# Convenient binary float aliases.
+#
+
+export alias Float16 => Float<11, 5>
+export alias Float32 => Float<24, 8>
+export alias Float64 => Float<53, 11>
+export alias Float128 => Float<113, 15>

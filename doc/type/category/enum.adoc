@@ -1,0 +1,172 @@
+= Enum
+
+> In computer programming, an enumerated type […] is a data type consisting of a set of […] enumerators of the type. The enumerator names are usually identifiers that behave as constants in the language.
+> -- Wikipedia contributors, https://en.wikipedia.org/wiki/Enumerated_type
+
+In Onyx, a _enum_ type is `~ Int`, `: SSize` by default.
+Enumerator values begin with `0` and increment by `1` unless explicitly set.
+A enumerator constant can be safely interpreted as the underlying type, but not vice versa.
+
+```nx
+enum Foo {
+  Bar,     # Implicitly `Bar = 0,`
+  Baz = 2, # Set the value explicitly
+  Qux      # Implicitly `3`
+}
+
+let foo : Foo = Foo::Bar # OK, can assign a enumerator directly
+foo = Foo(Foo::Bar)      # OK, can construct with a enumerator (won't throw)
+foo = Foo(0)             # OK, but may throw `EnumError`
+
+assert(foo as SSize == 0) # Can safely upcast
+
+# 0z as Foo       # => Panic! Can not safely cast `SSize` to `Foo`
+unsafe! 0z as Foo # OK, but unsafe
+```
+
+A _symbol_ expands to a enumerator constant unless ambigous.
+
+```nx
+enum Foo {
+  Bar,
+  Baz
+}
+
+enum NotFoo {
+  Bar,
+  Qux
+}
+
+def foo(arg : Foo) { }
+foo(:bar) # OK, expands to `Foo::Bar` without ambiguity
+
+def any(arg ~ Foo || NotFoo) { }
+# any(:bar)   # => Panic! Would ambigously expand to either `Foo::Bar` or `NotFoo::Bar`
+any(Foo::Bar) # OK
+any(:qux)     # OK (`NotFoo::Qux`)
+```
+
+A enum may inherit another enum or a type matching `~ Int`, but it doesn't inherit any `Int` members, though.
+
+.Enum inheritance
+====
+```nx
+enum Foo : UInt8 {
+  Bar, # `= 0`
+  Baz  # `= 1`
+}
+
+# Foo::Bar + 1         # Panic! Undeclared method `Foo:+()`
+
+enum FooPlus : Foo {
+  Qux # ` = 2`
+}
+
+FooPlus::Baz # OK, inherited
+FooPlus::Qux # OK, the new enumerator value
+```
+====
+
+Rust-like enums can be achieved using the <<_distinct_alias, distinct alias>> feature.
+Also see <<_variant>>.
+
+.Rust-like enum
+====
+```nx
+distinct alias RustEnum => Variant<String, Int32> {
+  def foo() {
+    switch (this) {
+      case String then this~String
+      case Int32  then this~Int32
+    }
+  }
+}
+
+let rust_enum = RustEnum("foo") # Is really `Variant<String, Int32>("foo")`
+```
+====
+
+== Flag
+
+A enum doesn't support bitwise operations by itself.
+However, a stem:[tt "flag"] may be declared instead, which would define bitwise methods and operators accepting another flag value.
+All flag enumerator values shall be a power of two; it may only inherit an `~ UInt` type, `USize` by default.
+
+.Flag
+====
+```nx
+enum Enum {
+  Foo, # `= 0`
+  Bar, # `= 1`
+  Baz  # `= 2`
+}
+
+# Enum::Foo | Enum::Bar # => Panic! Undeclared `Enum.|()`
+
+flag Flag {
+  Foo, # `= 1` (`2 ** 0`)
+  Bar, # `= 2` (`2 ** 1`)
+  Baz  # `= 4` (`2 ** 2`)
+}
+
+(Flag::Foo | Flag::Bar) as USize == 3 # OK
+(Flag::Foo.and(:baz)) as USize == 5   # OK
+```
+====
+
+== Enum template argument
+
+A enum or flag (with adjacency supported) literal may be used as a template argument.
+Note that a template argument must not have the same name as the already declared enum.
+
+.Enum template argument
+====
+```nx
+enum Color {
+  Red,
+  Green,
+  Blue
+}
+
+struct Foo<Color: C ~ \Color> {
+  def foo() -> C
+}
+
+assert(Foo<Color: :red>.foo() == Color::Red)
+assert(Foo<Color: Color::Blue>.foo() == :blue)
+```
+====
+
+A <<_flag, flag>> template argument accepts a flag mask, i.e. multiple flag values.
+
+.Flag template argument
+====
+```nx
+flag Mode {
+  Read,
+  Write
+}
+
+struct IO<Mode: M ~ \Mode> { }
+
+# Implement for readable.
+impl IO<:read> {
+  decl read()
+}
+
+# Implement for writeable.
+impl IO<:write> {
+  decl write()
+}
+
+# Implement for both readable and writeable.
+impl IO<:read | :write> {
+  decl common()
+}
+
+IO<:read>().read()            # OK
+# IO<:read>().write()         # => Panic! Undeclared `IO<Mode::Read>.write`
+IO<:read | :write>().read()   # OK
+IO<:read | :write>().common() # OK
+```
+====

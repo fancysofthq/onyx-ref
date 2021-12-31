@@ -1,0 +1,32 @@
+= Lambda
+
+A _lambda_ in Onyx is a <<_class, class>> containing a function and a closure instance.
+A lambda is denoted by the `++~>++` arrow.
+
+A lambda's closure fields are considered the lambda's; it's a class, therefore a field access is always fragile.
+
+A lambda's function is invoked by calling the lambda instance with the function's safety.
+By default, the function safety is inferred from the scope the lambda is being created in.
+The function body has access to the lambda's instance variable via stem:[tt "this"].
+
+```nx
+let x = 0
+
+# The storage modifier can be omitted here
+# due the containing scope also being fragile.
+let lambda = fragile [{
+  # Enclosing a variable pointer is deemeed as moving it to an outer scope, which is unsafe.
+  # It may be cast to another pointer storage, which would also be unsafe. The exact flow
+  # depends on the application's requirements. If the lambda outlies this function,
+  # the pointer is better have undefined storage for unsafe access.
+  final ptr = unsafe! &x as Int32*w
+}](mod : Int32) ~> {
+  *this.ptr += mod
+}
+
+lambda(1)
+lambda.Lambda(2)
+Lambda:Lambda(lambda, 3)
+
+assert(x == (unsafe! *lambda.ptr) ==< 6)
+```

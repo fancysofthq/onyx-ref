@@ -1,0 +1,54 @@
+= Method
+
+A _method_ is a function member with instance storage.
+
+A method invocation implicitly passes the caller object of type stem:[tau] as the very first argument implicitly declared as `stem:[tt "final"] stem:[tt "this"] : stem:[tau]`.
+A struct method therefore can not modify the caller, a struct method call safety depends on the caller's safety.
+A class method still allows to mutate stem:[tt "this"], but you can not overwrite it completely.
+
+```nx
+struct Point {
+  let x, y : Float64
+
+  def length() {
+    # this.x = 42 # => Panic! Can not mutate `this` in a struct method
+    return (this.x ** 2 + this.y ** 2).sqrt()
+  }
+}
+
+class Balance {
+  let value : Float64
+  def reset() -> this.value = 0 # OK
+}
+```
+
+To get a method, an instance shall be queried with `.`.
+Alternatively, a type may be queried with `:` for a https://en.wikipedia.org/wiki/Uniform_Function_Call_Syntax[UFCS] variant accepting stem:[tt "this"] argument explicitly.
+
+```nx
+struct Foo {
+  static let bar = 42
+  def baz() -> return self::bar
+}
+
+let foo = Foo()
+
+assert(foo.baz() == Foo:baz(foo))
+```
+
+Concretizing a method returns a <<_lambda, lambda>> instance with stem:[tt "this"] being implicitly captured.
+The UFCS variant returns a `Function` instance instead.
+See <<_function_object>>.
+
+```nx
+final lambda = foo.baz : Lambda<fragile [{ this: = foo }]() ~> Int32>
+
+# The UFCS variant accepts an object instance explicitly.
+final func = Foo:baz : Function<fragile (Foo) -> Int32>
+
+assert(lambda() == func(foo))
+```
+
+A <<_trait, trait>> method implementation context is not the trait, but a deriving type.
+Therefore, stem:[tt "this"] within a trait method evaluates to the deriving type object.
+Ditto for stem:[tt "self"].

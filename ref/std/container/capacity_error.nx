@@ -1,0 +1,12 @@
+import Exception from "../../exception.nx"
+
+# A container capacity error thrown when, for example,
+# resizing would implicitly remove existing elements.
+#
+# ```
+# final list = List([1, 2, 3, 4])
+# list.resize!(1) # CapacityError! Resizing would delete existing elements
+# ```
+export default class CapacityError : Exception {
+  static self(message) -> self({ Exception(message) })
+}

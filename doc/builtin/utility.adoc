@@ -1,0 +1,51 @@
+= Utility types
+
+== `Bool`
+
+The boolean type with two values: stem:[tt"true"] and stem:[tt"false"]; these are also literals.
+stem:[tt"false"] is one of the three <<_if, falsey>> values in Onyx, along with <<_nil, stem:[tt"nil"]>> and <<_void, stem:[tt"void"]>>.
+
+The memory layout of `Bool` is undefined.
+There are built-in method to convert to integers, including to a single `Bit`.
+
+== `void`
+
+stem:[tt"void"] is a special type implying absense of value.
+Instead of having a zero size, void doesn't have size at all.
+
+The semantics is equivalent to such in C.
+In fact, stem:[tt"void"] is interchangeable with `$void`.
+
+It is not possible to assign a void.
+The only exception is assigning to a void-able variant; in such cases stem:[tt"void"] acts as a unit type.
+A void-able variant `Variant<stem:[tau], stem:[tt"void"]>` can be shortcut with `stem:[tau]??`.
+
+```nx
+# It can be either `nil`, `User` or void.
+var : Variant<User?, void> : Variant<nil, User??> = void
+```
+
+Along with <<_bool, stem:[tt"false"]>> and <<_nil, stem:[tt"nil"]>>, stem:[tt"void"] is a <<_if, falsey>> [.line-through]#value# entity.
+
+== `discard`
+
+When used as a return type restriction, stem:[tt"discard"] allows the callee to return literally anything, but caller would always treat it as <<_void, stem:[tt"void"]>>.
+In practice, this means _"return anything, it'd be discarded anyway"_ without enforcing the void return type.
+
+```nx
+decl foo(block : T => void) -> void
+decl bar(block : T => discard) -> void
+
+# [1, 2].foo(e => e * 2) # => Panic! Must return `void`, returns `Int32`
+
+# The returned value of the block is still `Int32`,
+# but it's discarded and thus legal.
+[1, 2].bar(e => e * 2) # OK
+```
+
+The stem:[tt"discard"] keyword can be shortcut with `_`.
+
+```nx
+def sum(a, b) -> _ { a + b }
+# let result = sum(1, 2) # => Panic! Can not assign a discarded value
+```

@@ -1,0 +1,24 @@
+import Indexable from "./indexable.nx"
+import Enumerable from "./enumerable.nx"
+import { UInt, SSize } from "./int.nx"
+
+@[Builtin]
+export default struct Array<
+  Type: T,
+  Size: Z ~ \UInt
+> : [
+  Indexable<T, SSize>,
+  Enumerable<T>
+] {
+  let this : self
+
+  builtin impl ~Indexable.[](index : SSize) -> T
+  builtin impl ~Indexable.[]?(index : SSize) -> T??
+  builtin impl ~Indexable.[]=(index : SSize, value : T) -> T
+
+  impl ~(Enumerable && Indexable).each#indexed(yield) => {
+    (0..Z).each(i => yield(this[i], i))
+  }
+
+  reimpl eachfield(yield) => this.each(e => yield(e))
+}

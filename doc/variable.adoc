@@ -1,0 +1,31 @@
+= Variable
+
+An Onyx _variable_ is defined with stem:[tt "let"] keyword.
+For C variables, see <<_interoperability>>.
+
+A variable can be reassgined and mutated.
+If a variable declared with stem:[tt "let final"] or simply stem:[tt "final"], it becomes a _final_ variable.
+A final variable can not be reassigned.
+A final <<_record, record>> or <<_struct, struct>> variable is deemed a collection of forcebly-final fields and thus becomes immutable; whereas a final <<_class, class>> variable is still mutable, i.e. its fields may be changed.
+
+A variable identifier shall match the following regular expression: `/[a-zA-Z_](a-zA-Z0-9_)*/`.
+Otherwise, it is wrapped in backticks; in that case, the identifer may contain any Unicode character except a backtick.
+
+A variable always has concrete type in runtime.
+It may be restricted to a type upon definition or access using the `stem:[var] : stem:[tau]` notation.
+Otherwise the type is inferred, if possible.
+See <<_type_restriction>>.
+
+```nx
+let x = 42
+x = 43 # OK
+
+final `ё` : Int32 = 44
+# `ё` = 45 # Panic! Can not assign to a final variable
+```
+
+A redefinition of a variable with the same identifer and type is legal.
+
+include::./variable/storage.adoc[leveloffset=+1]
+include::./variable/assignment.adoc[leveloffset=+1]
+include::./variable/field.adoc[leveloffset=+1]

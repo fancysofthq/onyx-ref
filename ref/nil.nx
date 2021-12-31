@@ -1,0 +1,4 @@
+# The only globally accessible unit type.
+# It is possible to extend `nil`, which makes it the God type-to-go.
+@[Builtin]
+export default unit nil;

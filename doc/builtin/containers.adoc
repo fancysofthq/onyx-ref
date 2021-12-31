@@ -1,0 +1,69 @@
+= Builtin containers
+
+A builtin container has its size known in advance and is thus allocated on stack.
+A container literal commonly allows trailing commas.
+
+== Tuple
+
+A _tuple_ is a non-empty stack-allocated ordered sequence of heterogeneous elements.
+A tuple literal is a sequence of comma-separated elements wrapped in parentheses with trailing comma allowed, e.g. `(a, b)`.
+
+A single-element tuple is called a _monuple_.
+A monuple can have its parentheses omitted.
+Therefore, `Tuple<T>` stem:[-=] `(stem:[tau])` stem:[-=] `(stem:[tau],)` stem:[-=] `stem:[tau]` stem:[-=] `Tuple<(stem:[tau])>` stem:[-=] `Tuple<Tuple<stem:[tau]>>` etc.
+
+A tuple may be safely interpreted as an <<_array, array>> or <<_tensor, tensor>> if its elements are actually homogeneous.
+
+```onyx
+(1, 2) : Tuple<Int32, Int32> as Int32[2] as 2xInt32 # Safe
+```
+
+== Array
+
+An _array_ is a non-empty statically-sized stack-allocated ordered sequence of homogeneous elements.
+
+As a syntactic sugar, `Array<stem:[tau], stem:[NN]>` stem:[-=] `stem:[tau][stem:[NN]]`, e.g. `Array<Int32, 2>` stem:[-=] `Int32[2]`.
+Absense of size (e.g. `Int32[]`) implies <<_slice, `Slice`>>, not array.
+
+An array literal is wrapped in square brackets with traling comma allowed, e.g. `[1, 2]`.
+A magic array literal removes the need for commas and allows the underlying-type defining suffix.
+
+```onyx
+[1f, 2f] == %[1 2]f : Float64[2]
+```
+
+An array instance may be safely interpreted as a <<_tensor, tensor>> or a <<_tuple, tuple>> instance, and vice versa if the elements are actually homogeneous.
+
+```onyx
+[1, 2] : Int32[2] as (Int32, Int32) as 2xInt32 # Safe
+```
+
+== Tensor
+
+A tensor is a non-empty multi-dimensional <<_array, array>> with tensor-specific functionality.
+A compiler is expected to optimize tensor operations; it also moves number-array-specific features (e.g. stem:[o.]) into a separate entity.
+
+A tensor type `Tensor<stem:[tau], *stem:[NN]>` can be shortcut as `stem:[NN]xstem:[tau]`, e.g. `Tensor<Int32, 2, 3>` stem:[-=] `2x3xInt32`.
+There are distinct aliases for vectors (`Vector<stem:[tau], size>`) and matrices (`Matrix<stem:[tau], Rows, Columns>`).
+
+Comma-separated tensor literal elements are wrapped in pipes, with each comma-separated row wrapped in square brackets, e.g. `|1, 2, 3, 4|` stem:[-=] `|[1, 2, 3, 4]|`.
+A tensor literal may have an underlying-type-defining suffix.
+A magic tensor literal removes the need for commas and allows the underlying-type defining suffix.
+
+```onyx
+|1, 2, 3, 4| : Vector<Int32, 4> : 4xInt32
+
+%|[1 2]
+  [3 4]|f : Matrix<Float64, 2, 2> : 2x2xFloat64
+
+%|[[1 2][3  4]]
+  [[5 6][7 20]]| : Tensor<Int32, 2, 2, 2> : 2x2x2xFloat32
+```
+
+A tensor instance may be safely interpreted as an <<_array, array>> or <<_tuple, tuple>> instance and vice versa if the elements are actually homogeneous.
+
+```onyx
+|1, 2, 3, 4| : 4xInt32 as
+  Int32[4] as
+  (Int32, Int32, Int32, Int32) # Safe
+```

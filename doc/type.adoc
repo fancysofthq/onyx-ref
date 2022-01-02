@@ -93,12 +93,12 @@ struct Cube : Figure, Drawable2D {
 
 # Later on we decide to also make a cube drawable in 3D.
 # It would break existing `cube.draw()` calls.
-impl Cube : Drawable3D
+extend Cube : Drawable3D {
   # impl draw() { }                   # => Panic! Ambiguous
   impl (self ~ Drawable3D).draw() { } # OK, virtualized to select the one we need
   # impl self~Drawable3D.draw() { }   # A legal shortcut
   # impl ~Drawable3D.draw() { }       # Or even shorter
-end
+}
 
 # Now, let's run some code.
 #
@@ -113,8 +113,8 @@ cube~Drawable2D.draw() # Call the 2D implementation explicitly
 cube~Drawable3D.draw() # Call the 3D implementation explicitly
 
 # def draw<T ~ Figure>(figure : T) # Can be shortcut:
-def draw(figure ~ Figure)
-  if (figure ~? Drawable2D)
+def draw(figure ~ Figure) {
+  if (figure ~? Drawable2D) {
     @debug<@typeof(figure)>()  # => T~(Figure && Drawable2D) (note the expression)
     figure.draw()              # Always call the 2D implementation
     figure~Drawable2D.draw()   # Ditto
@@ -132,18 +132,18 @@ def draw(figure ~ Figure)
         figure~Drawable2D.draw()   # Ditto
         # figure~Drawable3D.draw() # => Panic! Can not virtualize to `Drawable3D`
       }
-  else
+  } else {
     @debug<@typeof(figure)>()  # => T~(Figure && !Drawable2D)
     # figure.draw()            # => Panic! Undefined `T~Figure.draw`
     # figure~Drawable2D.draw() # => Panic! Can not virtualize to `Drawable2D`
     # figure~Drawable3D.draw() # => Panic! Can not virtualize to `Drawable3D`
-  end
+  }
 
   @debug<@typeof(figure)>()  # => T~Figure
   # figure.draw()            # => Panic! Undefined `T~Figure.draw`
   # figure~Drawable2D.draw() # => Panic! Can not virtualize to `Drawable2D`
   # figure~Drawable3D.draw() # => Panic! Can not virtualize to `Drawable3D`
-end
+}
 ```
 ====
 

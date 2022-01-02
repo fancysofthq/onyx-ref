@@ -6,7 +6,7 @@ TODO: Allow Greek and/or Unicode-math symbols?
 
 == Unary operator
 
-An unary operator function identifier consists of a single symbol, one of `~!^-`, and it doesn't accept any arguments.
+An unary operator function identifier consists of a single symbol, one of `~^-`, and it doesn't accept any arguments.
 An unary operator call may be shortcut as `stem:[@]stem:[a]` stem:[-=] `stem:[a].stem:[@]()`.
 
 ```nx

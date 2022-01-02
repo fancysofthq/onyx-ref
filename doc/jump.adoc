@@ -7,9 +7,10 @@ A _jump_ statement alters the code execution flow based on some condition.
 An stem:[tt "if"] statement implements conditional jump.
 It may have zero or more additional stem:[tt "elif"] branches, and at most one stem:[tt "else"] branch.
 
-A branch condition is a runtime expression always wrapped in parentheses.
-A branch condition expression is _falsey_ if it evaluates to either <<_bool, stem:[tt "false"]>>, <<_nil, stem:[tt "nil"]>> or <<_void, stem:[tt "void"]>>; otherwise it's _truthy_.
+An expression is _falsey_ if it evaluates to either <<_bool, stem:[tt "false"]>>, <<_nil, stem:[tt "nil"]>> or <<_void, stem:[tt "void"]>>; otherwise it's _truthy_.
+There are builtin boolean algebra operators: stem:[tt "and"], stem:[tt "or"] and stem:[tt "not"] with `&&`, `||` and `!` counterparts; all return a boolean value.
 
+A branch condition is a runtime expression always wrapped in parentheses.
 A branch body must be wrapped in brackets unless it's a single expression.
 A branch body may be optionally delimeted with stem:[tt "then"] for readability, regardless of brackets; stem:[tt "else then"] is illegal.
 

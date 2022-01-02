@@ -1315,12 +1315,12 @@ struct Cube : Figure, Drawable2D {
 
 # Later on we decide to also make a cube drawable in 3D.
 # It would break existing `cube.draw()` calls.
-impl Cube : Drawable3D
+extend Cube : Drawable3D {
   # impl draw() { }                   # =&gt; Panic! Ambiguous
   impl (self ~ Drawable3D).draw() { } # OK, virtualized to select the one we need
   # impl self~Drawable3D.draw() { }   # A legal shortcut
   # impl ~Drawable3D.draw() { }       # Or even shorter
-end
+}
 
 # Now, let's run some code.
 #
@@ -1335,8 +1335,8 @@ cube~Drawable2D.draw() # Call the 2D implementation explicitly
 cube~Drawable3D.draw() # Call the 3D implementation explicitly
 
 # def draw&lt;T ~ Figure&gt;(figure : T) # Can be shortcut:
-def draw(figure ~ Figure)
-  if (figure ~? Drawable2D)
+def draw(figure ~ Figure) {
+  if (figure ~? Drawable2D) {
     @debug&lt;@typeof(figure)&gt;()  # =&gt; T~(Figure &amp;&amp; Drawable2D) (note the expression)
     figure.draw()              # Always call the 2D implementation
     figure~Drawable2D.draw()   # Ditto
@@ -1354,18 +1354,18 @@ def draw(figure ~ Figure)
         figure~Drawable2D.draw()   # Ditto
         # figure~Drawable3D.draw() # =&gt; Panic! Can not virtualize to `Drawable3D`
       }
-  else
+  } else {
     @debug&lt;@typeof(figure)&gt;()  # =&gt; T~(Figure &amp;&amp; !Drawable2D)
     # figure.draw()            # =&gt; Panic! Undefined `T~Figure.draw`
     # figure~Drawable2D.draw() # =&gt; Panic! Can not virtualize to `Drawable2D`
     # figure~Drawable3D.draw() # =&gt; Panic! Can not virtualize to `Drawable3D`
-  end
+  }
 
   @debug&lt;@typeof(figure)&gt;()  # =&gt; T~Figure
   # figure.draw()            # =&gt; Panic! Undefined `T~Figure.draw`
   # figure~Drawable2D.draw() # =&gt; Panic! Can not virtualize to `Drawable2D`
   # figure~Drawable3D.draw() # =&gt; Panic! Can not virtualize to `Drawable3D`
-end</code></pre>
+}</code></pre>
 </div>
 </div>
 </div>
@@ -3754,11 +3754,12 @@ list[0] = list[0] + 1</code></pre>
 It may have zero or more additional \$tt "elif"\$ branches, and at most one \$tt "else"\$ branch.</p>
 </div>
 <div class="paragraph">
-<p>A branch condition is a runtime expression always wrapped in parentheses.
-A branch condition expression is <em>falsey</em> if it evaluates to either <a href="#_bool">\$tt "false"\$</a>, <a href="#_nil">\$tt "nil"\$</a> or <a href="#_void">\$tt "void"\$</a>; otherwise it&#8217;s <em>truthy</em>.</p>
+<p>An expression is <em>falsey</em> if it evaluates to either <a href="#_bool">\$tt "false"\$</a>, <a href="#_nil">\$tt "nil"\$</a> or <a href="#_void">\$tt "void"\$</a>; otherwise it&#8217;s <em>truthy</em>.
+There are builtin boolean algebra operators: \$tt "and"\$, \$tt "or"\$ and \$tt "not"\$ with <code>&amp;&amp;</code>, <code>||</code> and <code>!</code> counterparts; all return a boolean value.</p>
 </div>
 <div class="paragraph">
-<p>A branch body must be wrapped in brackets unless it&#8217;s a single expression.
+<p>A branch condition is a runtime expression always wrapped in parentheses.
+A branch body must be wrapped in brackets unless it&#8217;s a single expression.
 A branch body may be optionally delimeted with \$tt "then"\$ for readability, regardless of brackets; \$tt "else then"\$ is illegal.</p>
 </div>
 <div class="listingblock">
@@ -4258,7 +4259,7 @@ Ditto for \$tt "self"\$.</p>
 <div class="sect3">
 <h4 id="_unary_operator"><a class="link" href="#_unary_operator">9.4.1. Unary operator</a></h4>
 <div class="paragraph">
-<p>An unary operator function identifier consists of a single symbol, one of <code>~!^-</code>, and it doesn&#8217;t accept any arguments.
+<p>An unary operator function identifier consists of a single symbol, one of <code>~^-</code>, and it doesn&#8217;t accept any arguments.
 An unary operator call may be shortcut as <code>\$@\$\$a\$</code> \$-=\$ <code>\$a\$.\$@\$()</code>.</p>
 </div>
 <div class="listingblock">
@@ -4958,7 +4959,7 @@ See <a href="#_posix">Section C.6.2.1, &#8220;POSIX&#8221;</a>.
 <div id="footer">
 <div id="footer-text">
 Version 0.2.0<br>
-Last updated 2021-12-31 13:49:57 UTC
+Last updated 2022-01-02 11:14:39 UTC
 </div>
 </div>
 <script type="text/x-mathjax-config">

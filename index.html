@@ -557,11 +557,7 @@ body.book #toc,body.book #preamble,body.book h1.sect0,body.book .sect1>h2{page-b
 <li><a href="#_target_specific_libraries">C.6. Target-specific libraries</a></li>
 </ul>
 </li>
-<li><a href="#_panic">Appendix D: Panic</a>
-<ul class="sectlevel2">
-<li><a href="#_p0002">D.1. P0002</a></li>
-</ul>
-</li>
+<li><a href="#_panic">Appendix D: Panic</a></li>
 </ul>
 </div>
 </div>
@@ -3269,12 +3265,12 @@ The <code>c</code> suffix would make it an array of <code>Char</code> instead.</
 <h2 id="_variable"><a class="link" href="#_variable">7. Variable</a></h2>
 <div class="sectionbody">
 <div class="paragraph">
-<p>An Onyx <em>variable</em> is defined with \$tt "let"\$ keyword.
+<p>An Onyx <em>variable</em> is defined with \$tt "let"\$ directive.
 For C variables, see <a href="#_interoperability">Section 12, &#8220;Interoperability&#8221;</a>.</p>
 </div>
 <div class="paragraph">
 <p>A variable can be reassgined and mutated.
-If a variable declared with \$tt "final"\$ keyword, it becomes a <em>final</em> variable.
+If a variable declared with a \$tt "final"\$ directive, it becomes a <em>final</em> variable.
 A final variable can not be reassigned.
 A final <a href="#_record">record</a> or <a href="#_struct">struct</a> variable is deemed a collection of forcebly-final fields and thus becomes immutable; whereas a final <a href="#_class">class</a> variable is still mutable, i.e. its fields may be changed.</p>
 </div>
@@ -3608,8 +3604,7 @@ T().field
 </div>
 </div>
 <div class="paragraph">
-<p>A special \$tt "getter"\$ defintion generates a public getter and a <a href="#_private">private</a> setter.
-\$tt "getter"\$ is <a href="#_p0002">incompatible</a> with \$tt "final"\$ modifier.</p>
+<p>A special \$tt "getter"\$ directive generates a public getter and a <a href="#_private">private</a> setter.</p>
 </div>
 <div class="listingblock">
 <div class="content">
@@ -4979,28 +4974,13 @@ See <a href="#_posix">Section C.6.2.1, &#8220;POSIX&#8221;</a>.
 <div class="paragraph">
 <p>This soon-to-be-standardized appendix lists panic codes with their descriptions.</p>
 </div>
-<div class="sect2">
-<h3 id="_p0002"><a class="link" href="#_p0002">D.1. P0002</a></h3>
-<div class="paragraph">
-<p>\$tt "final"\$ and \$tt "getter"\$ modifiers are incompatible during variable definition.</p>
-</div>
-<div class="listingblock">
-<div class="content">
-<pre class="highlight"><code class="language-onyx" data-lang="onyx">class Foo {
-  # final getter bar : Int32 # =&gt; Panic (P0002)!
-  final bar : Int32          # OK
-  getter baz : Int32         # OK
-}</code></pre>
-</div>
-</div>
-</div>
 </div>
 </div>
 </div>
 <div id="footer">
 <div id="footer-text">
 Version 0.2.0<br>
-Last updated 2022-01-05 17:34:17 UTC
+Last updated 2022-01-05 17:40:38 UTC
 </div>
 </div>
 <script type="text/x-mathjax-config">

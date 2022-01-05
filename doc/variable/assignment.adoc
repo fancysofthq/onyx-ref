@@ -41,58 +41,57 @@ x # OK, it's now safe
 
 == Multi-assignment
 
-Multiple variables can be assigned at once, also during definition (called _multi-definition_).
-
-When assigning to a single value, `x, y = z` ≡ `(x = (y = z))`.
+Multiple variables can be assigned at once, also during definition.
+When assigning to a value stem:[alpha], `x, y = stem:[alpha]` ≡ `(x = (y = stem:[alpha]))`.
 Therefore, the latest inferred type wins, unless explicitly restricted.
 
-.Multi-assignment of a single value
-```onyx==
-let x, y, final z : UInt32 = 1 # OK, all three are `UInt32`
+.Multi-assignment
+====
+```onyx
+let x, y = 42
 
 # Equivalent to:
 #
 
-final z = 1 : UInt32
-let y = z
+let y = 42
 let x = y
 ```
 
-Multiple variables may also be assigned to the same amount of values, not just a single one.
-
-.Multi-assignment of multiple values
 ```onyx
-# final x, y = 1, 2, 3 # => Panic! Multiple assignment mismatch
-  final x, y = 1, 2    # OK
+let x, final y = 42, z : Float64 = 69
+
+# Equivalent to:
+#
+
+final z = 69 : Float64
+final y = 42
+let x = y
 ```
-
-// Multiple variables definition ends upon encountering an assignment or restriction.
-
-// ```onyx
-// # final x, y = 1, z = 2       # => Panic! Undeclared variable `z` (`z = 2` is an assignment)
-//   final x, y = 1, final z = 2 # OK, `x` and `y` are `1`, `z` is `2`
-//   final x, y : Int32, z = 2   # OK, `x` and `y` don't have a value set, but both `Int32`
-//   final x, y, z : Int32 = 2   # OK, all three are `2 : Int32`
-// ```
+====
 
 === Splatting
 
-A record, tuple, array or tensor container can be _splatted_ using the `*` operator.
-A compiler treats a splatted container as if its elements were hard-coded into the source code one-by-one, comma-separated, which suits multi-assignment.
+It is illegal to assign multiple variables to multiple values.
+Instead, explicit _splatting_ should be used.
+A <<_record, record>>, <<_tuple, tuple>>, <<_array, array>> or <<_tensor, tensor>> container can be splatted using the `*` operator.
+Upon assigning a splatted container to multiple variables, arities must match.
 A splatted record also includes its fields' labels.
 
 TIP: You may imagine the splat operator as a road roller flattening its operand into the source code.
 
 ```onyx
 # These are all equivalent.
-let x, y = *(a, b)
-let x, y = *[a, b]
-let x, y = *|a, b|
-let x, y = *{ x: a, y: b }
-let x, y = a, b
+#
+
+let x, y = *(1, 2)
+let x, y = *[1, 2]
+let x, y = *|1, 2|
+let x, y = *{ x: 1, y: 2 }
+
+# let x, y = *(1, 2, 3) # => Panic! Splatting arity mismatch
 ```
 
-A variable definition may be labeled to map a splatted record's field.
+A variable may be labeled to map a splatted record's field.
 
 ```onyx
 final record = { x: 1, y: 2 }

@@ -110,6 +110,9 @@ let tuple = (a, b)
 let x, y = **&tuple # First, dereference the tuple. Then, splat it
 ```
 
+Splatting allows to call a <<_binary_operator, binary operator>> with multiple arguments.
+For example, `(0.1 + 0.2) ~= *(0.3, delta: 0.1)` stem:[-=] `(0.1 + 0.2).~=(0.3, delta: 0.1)`.
+
 Also see <<_unsplatting>>.
 
 == Autocasting

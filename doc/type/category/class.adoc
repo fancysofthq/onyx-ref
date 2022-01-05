@@ -6,7 +6,7 @@ Unlike struct or record, a stem:[tt "final"] class instance still allows its fie
 
 A class doesn't have a public constructor implicitly defined, only a private one.
 A class constructor is the only case when <<_function_visibility, visibility overloading>> is legal.
-However, if a class doesn't contain any fields, a zero-arity public constructor is defined.
+If a class doesn't contain any fields, a zero-arity public constructor is defined.
 
 ```onyx
 class Dog {

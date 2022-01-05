@@ -1,10 +1,10 @@
 = Variable
 
-An Onyx _variable_ is defined with stem:[tt "let"] keyword.
+An Onyx _variable_ is defined with stem:[tt "let"] directive.
 For C variables, see <<_interoperability>>.
 
 A variable can be reassgined and mutated.
-If a variable declared with stem:[tt "final"] keyword, it becomes a _final_ variable.
+If a variable declared with a stem:[tt "final"] directive, it becomes a _final_ variable.
 A final variable can not be reassigned.
 A final <<_record, record>> or <<_struct, struct>> variable is deemed a collection of forcebly-final fields and thus becomes immutable; whereas a final <<_class, class>> variable is still mutable, i.e. its fields may be changed.
 

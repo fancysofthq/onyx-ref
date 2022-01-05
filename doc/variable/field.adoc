@@ -98,6 +98,7 @@ T().field
 ```
 
 A special stem:[tt "getter"] defintion generates a public getter and a <<_private, private>> setter.
+stem:[tt "getter"] is <<_p0002, incompatible>> with stem:[tt "final"] modifier.
 
 ```nx
 struct T {

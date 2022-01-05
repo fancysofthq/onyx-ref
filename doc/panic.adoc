@@ -1,0 +1,16 @@
+[appendix]
+= Panic
+
+This soon-to-be-standardized appendix lists panic codes with their descriptions.
+
+== P0002
+
+stem:[tt "final"] and stem:[tt "getter"] modifiers are incompatible during variable definition.
+
+```onyx
+class Foo {
+  # final getter bar : Int32 # => Panic (P0002)!
+  final bar : Int32          # OK
+  getter baz : Int32         # OK
+}
+```

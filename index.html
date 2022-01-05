@@ -3274,7 +3274,7 @@ For C variables, see <a href="#_interoperability">Section 12, &#8220;Interoperab
 </div>
 <div class="paragraph">
 <p>A variable can be reassgined and mutated.
-If a variable declared with \$tt "let final"\$ or simply \$tt "final"\$, it becomes a <em>final</em> variable.
+If a variable declared with \$tt "final"\$ keyword, it becomes a <em>final</em> variable.
 A final variable can not be reassigned.
 A final <a href="#_record">record</a> or <a href="#_struct">struct</a> variable is deemed a collection of forcebly-final fields and thus becomes immutable; whereas a final <a href="#_class">class</a> variable is still mutable, i.e. its fields may be changed.</p>
 </div>
@@ -3453,6 +3453,10 @@ assert(y == 2)   # OK</code></pre>
 <pre class="highlight"><code class="language-onyx" data-lang="onyx">let tuple = (a, b)
 let x, y = **&amp;tuple # First, dereference the tuple. Then, splat it</code></pre>
 </div>
+</div>
+<div class="paragraph">
+<p>Splatting allows to call a <a href="#_binary_operator">binary operator</a> with multiple arguments.
+For example, <code>(0.1 + 0.2) ~= *(0.3, delta: 0.1)</code> \$-=\$ <code>(0.1 + 0.2).~=(0.3, delta: 0.1)</code>.</p>
 </div>
 <div class="paragraph">
 <p>Also see <a href="#_unsplatting">Section 9.1.1, &#8220;Unsplatting&#8221;</a>.</p>
@@ -4996,7 +5000,7 @@ See <a href="#_posix">Section C.6.2.1, &#8220;POSIX&#8221;</a>.
 <div id="footer">
 <div id="footer-text">
 Version 0.2.0<br>
-Last updated 2022-01-05 17:23:18 UTC
+Last updated 2022-01-05 17:34:17 UTC
 </div>
 </div>
 <script type="text/x-mathjax-config">

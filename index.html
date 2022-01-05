@@ -473,7 +473,7 @@ body.book #toc,body.book #preamble,body.book h1.sect0,body.book .sect1>h2{page-b
 <li><a href="#_scope">3. Scope</a>
 <ul class="sectlevel2">
 <li><a href="#_safety">3.1. Safety</a></li>
-<li><a href="#_visibility">3.2. Visibility</a></li>
+<li><a href="#_private">3.2. Visibility</a></li>
 <li><a href="#_c_scope">3.3. C scope</a></li>
 </ul>
 </li>
@@ -555,6 +555,11 @@ body.book #toc,body.book #preamble,body.book h1.sect0,body.book .sect1>h2{page-b
 <li><a href="#_streams">C.4. Streams</a></li>
 <li><a href="#_serialization">C.5. Serialization</a></li>
 <li><a href="#_target_specific_libraries">C.6. Target-specific libraries</a></li>
+</ul>
+</li>
+<li><a href="#_panic">Appendix D: Panic</a>
+<ul class="sectlevel2">
+<li><a href="#_p0002">D.1. P0002</a></li>
 </ul>
 </li>
 </ul>
@@ -1146,14 +1151,14 @@ Consequentially, in a threadsafe context code implicitly has the strongest order
 </div>
 </div>
 <div class="sect2">
-<h3 id="_visibility"><a class="link" href="#_visibility">3.2. Visibility</a></h3>
+<h3 id="_private"><a class="link" href="#_private">3.2. Visibility</a></h3>
 <div class="paragraph">
 <p><em>Visibility</em> may be either <em>public</em> or <em>private</em>.</p>
 </div>
 <div class="paragraph">
 <p>By default a variable or function is public.
 It may be defined explicitly private using the \$tt "private"\$ modifier.
-It is not possible to access a private member of a scope other than by wrapping the access in some getter.
+It is not possible to access a private member of a scope other than by wrapping the access in some sort of public getter.
 A visibility modifier can not be overloaded, only overriden; with an exception for a <a href="#_class">class</a> constructor.</p>
 </div>
 <div class="listingblock">
@@ -1182,7 +1187,7 @@ For example, <code>$int</code>, <code>$char*</code> etc.</p>
 That means, for example, that you have to <code>extern #include "stdio.h"</code> or <code>extern void puts(char*);</code> in <strong>each</strong> Onyx source file which calls <code>$puts</code>.</p>
 </div>
 <div class="paragraph">
-<p>See <a href="#_example_calling_c_code_from_onyx">Example 22, &#8220;Calling C code from Onyx&#8221;</a>.</p>
+<p>See <a href="#_example_calling_c_code_from_onyx">Example 23, &#8220;Calling C code from Onyx&#8221;</a>.</p>
 </div>
 </div>
 </div>
@@ -1995,7 +2000,7 @@ assert(point.x == 2)</code></pre>
 <div class="paragraph">
 <p>A class doesn&#8217;t have a public constructor implicitly defined, only a private one.
 A class constructor is the only case when <a href="#_function_visibility">visibility overloading</a> is legal.
-However, if a class doesn&#8217;t contain any fields, a zero-arity public constructor is defined.</p>
+If a class doesn&#8217;t contain any fields, a zero-arity public constructor is defined.</p>
 </div>
 <div class="listingblock">
 <div class="content">
@@ -3360,40 +3365,45 @@ x # OK, it's now safe</code></pre>
 <div class="sect3">
 <h4 id="_multi_assignment"><a class="link" href="#_multi_assignment">7.2.1. Multi-assignment</a></h4>
 <div class="paragraph">
-<p>Multiple variables can be assigned at once, also during definition (called <em>multi-definition</em>).</p>
-</div>
-<div class="paragraph">
-<p>When assigning to a single value, <code>x, y = z</code> ≡ <code>(x = (y = z))</code>.
+<p>Multiple variables can be assigned at once, also during definition.
+When assigning to a value \$alpha\$, <code>x, y = \$alpha\$</code> ≡ <code>(x = (y = \$alpha\$))</code>.
 Therefore, the latest inferred type wins, unless explicitly restricted.</p>
 </div>
-<div class="listingblock">
-<div class="title">Multi-assignment of a single value</div>
+<div class="exampleblock">
+<div class="title">Example 14. Multi-assignment</div>
 <div class="content">
-<pre class="highlight"><code class="language-onyx==" data-lang="onyx==">let x, y, final z : UInt32 = 1 # OK, all three are `UInt32`
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-onyx" data-lang="onyx">let x, y = 42
 
 # Equivalent to:
 #
 
-final z = 1 : UInt32
-let y = z
+let y = 42
 let x = y</code></pre>
 </div>
 </div>
-<div class="paragraph">
-<p>Multiple variables may also be assigned to the same amount of values, not just a single one.</p>
-</div>
 <div class="listingblock">
-<div class="title">Multi-assignment of multiple values</div>
 <div class="content">
-<pre class="highlight"><code class="language-onyx" data-lang="onyx"># final x, y = 1, 2, 3 # =&gt; Panic! Multiple assignment mismatch
-  final x, y = 1, 2    # OK</code></pre>
+<pre class="highlight"><code class="language-onyx" data-lang="onyx">let x, final y = 42, z : Float64 = 69
+
+# Equivalent to:
+#
+
+final z = 69 : Float64
+final y = 42
+let x = y</code></pre>
+</div>
+</div>
 </div>
 </div>
 <div class="sect4">
 <h5 id="_splatting"><a class="link" href="#_splatting">Splatting</a></h5>
 <div class="paragraph">
-<p>A record, tuple, array or tensor container can be <em>splatted</em> using the <code>*</code> operator.
-A compiler treats a splatted container as if its elements were hard-coded into the source code one-by-one, comma-separated, which suits multi-assignment.
+<p>It is illegal to assign multiple variables to multiple values.
+Instead, explicit <em>splatting</em> should be used.
+A <a href="#_record">record</a>, <a href="#_tuple">tuple</a>, <a href="#_array">array</a> or <a href="#_tensor">tensor</a> container can be splatted using the <code>*</code> operator.
+Upon assigning a splatted container to multiple variables, arities must match.
 A splatted record also includes its fields' labels.</p>
 </div>
 <div class="admonitionblock tip">
@@ -3411,15 +3421,18 @@ You may imagine the splat operator as a road roller flattening its operand into 
 <div class="listingblock">
 <div class="content">
 <pre class="highlight"><code class="language-onyx" data-lang="onyx"># These are all equivalent.
-let x, y = *(a, b)
-let x, y = *[a, b]
-let x, y = *|a, b|
-let x, y = *{ x: a, y: b }
-let x, y = a, b</code></pre>
+#
+
+let x, y = *(1, 2)
+let x, y = *[1, 2]
+let x, y = *|1, 2|
+let x, y = *{ x: 1, y: 2 }
+
+# let x, y = *(1, 2, 3) # =&gt; Panic! Splatting arity mismatch</code></pre>
 </div>
 </div>
 <div class="paragraph">
-<p>A variable definition may be labeled to map a splatted record&#8217;s field.</p>
+<p>A variable may be labeled to map a splatted record&#8217;s field.</p>
 </div>
 <div class="listingblock">
 <div class="content">
@@ -3591,7 +3604,8 @@ T().field
 </div>
 </div>
 <div class="paragraph">
-<p>A special \$tt "getter"\$ defintion generates a public getter and a <a href="#_private">private</a> setter.</p>
+<p>A special \$tt "getter"\$ defintion generates a public getter and a <a href="#_private">private</a> setter.
+\$tt "getter"\$ is <a href="#_p0002">incompatible</a> with \$tt "final"\$ modifier.</p>
 </div>
 <div class="listingblock">
 <div class="content">
@@ -3685,7 +3699,7 @@ Therefore it would be handy to be able to override class setters.</p>
 <p>A <em>special field assignment</em> <code>obj.field \$AA\$= value</code>, where \$AA\$ is a sequence of operator chars (one of <code>~%^&amp;*-+</code>) implicitly expands to <code>obj.field = obj.field \$AA\$ value</code>, e.g. <code>x.y += 1</code> &#8594; <code>x.y = x.y + 1</code> and it <strong>can not</strong> be overriden to avoid unexpected behaviour.</p>
 </div>
 <div class="exampleblock">
-<div class="title">Example 14. Special field assignment</div>
+<div class="title">Example 15. Special field assignment</div>
 <div class="content">
 <div class="listingblock">
 <div class="content">
@@ -3715,7 +3729,7 @@ foo.bar == 2 # Wut?</code></pre>
 Index accessors are usually implemented for indexable, e.g. container, types.</p>
 </div>
 <div class="exampleblock">
-<div class="title">Example 15. Index setters</div>
+<div class="title">Example 16. Index setters</div>
 <div class="content">
 <div class="listingblock">
 <div class="content">
@@ -4418,7 +4432,7 @@ let lambda = x ~&gt; x * 2     # OK if doesn't have closure
 An <em>actor</em> (i.e. the type the function is declared for) may be a type expression, which would only apply the statement if the caller matches the expression.</p>
 </div>
 <div class="exampleblock">
-<div class="title">Example 16. Out-of-scope declaration</div>
+<div class="title">Example 17. Out-of-scope declaration</div>
 <div class="content">
 <div class="listingblock">
 <div class="content">
@@ -4456,7 +4470,7 @@ forall T impl List.each#indexed(yield) -&gt; {
 A \$tt "catch"\$ clause accepts a <a href="#_generator">generator</a> block with a single argument, which is the caught exception instance.</p>
 </div>
 <div class="exampleblock">
-<div class="title">Example 17. Basic exception handling</div>
+<div class="title">Example 18. Basic exception handling</div>
 <div class="content">
 <div class="listingblock">
 <div class="title">main.nx</div>
@@ -4484,7 +4498,7 @@ To make an object throwable, it must be or inherit the builtin <code>Exception</
 A <code>String</code> instance may also be thrown; in that case, the string is implicitly passed as the <code>message</code> argument, i.e. <code>throw "Message"</code> \$-=\$ <code>throw Exception("Message")</code>.</p>
 </div>
 <div class="exampleblock">
-<div class="title">Example 18. Custom exception class</div>
+<div class="title">Example 19. Custom exception class</div>
 <div class="content">
 <div class="listingblock">
 <div class="title">main.nx</div>
@@ -4523,7 +4537,7 @@ $ echo($?)
 A compiler preserves macro data to ease debugging.</p>
 </div>
 <div class="exampleblock">
-<div class="title">Example 19. Rescuing unhandled exception</div>
+<div class="title">Example 20. Rescuing unhandled exception</div>
 <div class="content">
 <div class="listingblock">
 <div class="title">main.nx</div>
@@ -4594,7 +4608,7 @@ An immediate macro is evaluated as soon as it&#8217;s encountered in source code
 A postponed macro is evaluated at some later point of compilation, usually a specialization; it looks like it&#8217;s escaped, e.g. <code>\{% %}</code>.</p>
 </div>
 <div class="exampleblock">
-<div class="title">Example 20. Basic macros</div>
+<div class="title">Example 21. Basic macros</div>
 <div class="content">
 <div class="listingblock">
 <div class="content">
@@ -4623,7 +4637,7 @@ A compiler may provide a way to enable grained permissions, e.g. network access 
 See <a href="#_macros_api">Appendix B, <em>Macros API</em></a>.</p>
 </div>
 <div class="exampleblock">
-<div class="title">Example 21. Pinging from a macro</div>
+<div class="title">Example 22. Pinging from a macro</div>
 <div class="content">
 <div class="listingblock">
 <div class="content">
@@ -4667,7 +4681,7 @@ A <em>single</em> C expression or an entire block of C code shall follow the key
 See <a href="#_c_scope">Section 3.3, &#8220;C scope&#8221;</a>.</p>
 </div>
 <div id="_example_calling_c_code_from_onyx" class="exampleblock">
-<div class="title">Example 22. Calling C code from Onyx</div>
+<div class="title">Example 23. Calling C code from Onyx</div>
 <div class="content">
 <div class="listingblock">
 <div class="content">
@@ -4687,7 +4701,7 @@ unsafe! $puts(message.pointer as char*)</code></pre>
 <td class="content">
 <div class="paragraph">
 <p>The Fancy Onyx compiler implicitly links <code>libc</code> and <code>libm</code>, and also automatically looks up for the standard C header directories.
-<a href="#_example_calling_c_code_from_onyx">Example 22, &#8220;Calling C code from Onyx&#8221;</a> would therefore have been compiled simply with:</p>
+<a href="#_example_calling_c_code_from_onyx">Example 23, &#8220;Calling C code from Onyx&#8221;</a> would therefore have been compiled simply with:</p>
 </div>
 <div class="listingblock">
 <div class="content">
@@ -4720,7 +4734,7 @@ The entities are implicitly mangled to make the interop work seamlessly.
 Even type inferring works as expected.</p>
 </div>
 <div class="exampleblock">
-<div class="title">Example 23. Calling Onyx code from C</div>
+<div class="title">Example 24. Calling Onyx code from C</div>
 <div class="content">
 <div class="listingblock">
 <div class="content">
@@ -4764,7 +4778,7 @@ A amalgamation header file may also be compiled in a similar fashion.
 It would replace function definitions in <code>extern</code> directives with declarations.</p>
 </div>
 <div class="exampleblock">
-<div class="title">Example 24. Exporting a C library</div>
+<div class="title">Example 25. Exporting a C library</div>
 <div class="content">
 <div class="listingblock">
 <div class="title">main.nx</div>
@@ -4955,11 +4969,34 @@ See <a href="#_posix">Section C.6.2.1, &#8220;POSIX&#8221;</a>.
 </div>
 </div>
 </div>
+<div class="sect1">
+<h2 id="_panic"><a class="link" href="#_panic">Appendix D: Panic</a></h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>This soon-to-be-standardized appendix lists panic codes with their descriptions.</p>
+</div>
+<div class="sect2">
+<h3 id="_p0002"><a class="link" href="#_p0002">D.1. P0002</a></h3>
+<div class="paragraph">
+<p>\$tt "final"\$ and \$tt "getter"\$ modifiers are incompatible during variable definition.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-onyx" data-lang="onyx">class Foo {
+  # final getter bar : Int32 # =&gt; Panic (P0002)!
+  final bar : Int32          # OK
+  getter baz : Int32         # OK
+}</code></pre>
+</div>
+</div>
+</div>
+</div>
+</div>
 </div>
 <div id="footer">
 <div id="footer-text">
 Version 0.2.0<br>
-Last updated 2022-01-02 11:14:39 UTC
+Last updated 2022-01-05 17:23:18 UTC
 </div>
 </div>
 <script type="text/x-mathjax-config">

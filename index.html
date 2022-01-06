@@ -3041,7 +3041,8 @@ final y : Variant&lt;Int32, Float64, String&gt; = x # OK, accepts a narrower var
 </div>
 </div>
 <div class="paragraph">
-<p>An actual variant instance option value may be extracted with either \$tt "@get"\$ or \$tt "@get?"\$ instrinsic invocation.
+<p>A variant option of type \$tau\$ may be extracted with either <code>\$tt "@get"\$&lt;\$tau\$&gt;</code> or <code>\$tt "@get?"\$&lt;\$tau\$&gt;</code> instrinsic invocation.
+In contrary, the <code>\$tt "@neither"\$&lt;\$tau\$&gt;</code> intrinsic throws if it <strong>does</strong> currently hold \$tau\$.
 The <a href="#_safety">safety</a> of invoking an intrinsic depends on the instance <a href="#_storage">storage</a>: a local variant instance has threadsafe access, otherwise it&#8217;s fragile.</p>
 </div>
 <div class="admonitionblock caution">
@@ -3062,20 +3063,66 @@ You can explicitly obtain a variant tag offset in bytes using the \$tt "@offseto
 <div class="listingblock">
 <div class="content">
 <pre class="highlight"><code class="language-nx" data-lang="nx">import rand from "std/rand"
-import { out } from "std/term"
 
 # TIP: The top-level scope is fragile.
 #
 
-final var = rand(42, "foo") : Variant&lt;Int32, String&gt;
+final v = rand(42, "foo") : Variant&lt;Int32, String&gt;
 
-final a = @get&lt;Int32&gt;(var) : Int32     # May throw `VariantError` if it's not `Int32`
-final b = @get?&lt;String&gt;(var) : String? # May return `nil` if it's not `String`
+final a = @get&lt;Int32&gt;(v) : Int32      # May throw `VariantError` if it's NOT `Int32`
+final b = @get?&lt;String&gt;(v) : String?  # May return `nil` if it's NOT `String`
+final c = @neither&lt;Int32&gt;(v) : String # May throw `VariantError` if it IS `Int32`
 
 # Unsafely get a `String` option.
-final c = unsafe! *((&amp;var as void*)[@offsetof(var)] as String*)</code></pre>
+final d = unsafe! *((&amp;v as void*)[@offsetof(v)] as String*)</code></pre>
 </div>
 </div>
+</div>
+</div>
+<div class="paragraph">
+<p>If a result of a check whether a variant currently holds an option of type \$tau\$ is assigned to a local variable \$x\$ defined within a condition or a switcher, then the \$x\$ type is narrowed to \$tau\$.
+A truthy-ness check applied to a variable defined in a condition also narrows down its type.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-onyx" data-lang="onyx">final v0 = rand(42, "foo", nil)
+
+if (let v1 = v0) {
+  v0 : Variant&lt;Int32, String, nil&gt; # Intact
+  v1 : Variant&lt;Int32, String&gt;      # Narrowed down to non-nilable
+}
+
+if (let v2 = @get?&lt;Int32&gt;(v0)) {
+  v0 : Variant&lt;Int32, String, nil&gt; # Intact
+  v2 : Int32                       # Narrowed down
+}
+
+switch (let v3 = v0) {
+  case Int32 {
+    v0 : Variant&lt;Int32, String, nil&gt; # Intact
+    v3 : Int32                       # Narrowed down
+  } else {
+    v0 : Variant&lt;Int32, String, nil&gt; # Intact
+    v3 : String?                     # Narrowed down (still nilable)
+  }
+}</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Querying a variant at any scope transparently proxies the query to its actual option.
+Therefore, <em>all</em> of the options must implement the access for the compilation to succeed.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlight"><code class="language-onyx" data-lang="onyx">final v0 = rand([1, 2], "foo", nil)
+
+# v0.size() # =&gt; Panic! `nil.size` is undefined
+
+if (let v1 = v0) {
+  v1.size() # OK (both `Int32[2].size` and `String.size` are defined)
+}
+
+@neither&lt;nil&gt;(v0).size() # OK, may throw</code></pre>
 </div>
 </div>
 </div>
@@ -4980,7 +5027,7 @@ See <a href="#_posix">Section C.6.2.1, &#8220;POSIX&#8221;</a>.
 <div id="footer">
 <div id="footer-text">
 Version 0.2.0<br>
-Last updated 2022-01-05 17:40:38 UTC
+Last updated 2022-01-06 09:51:17 UTC
 </div>
 </div>
 <script type="text/x-mathjax-config">

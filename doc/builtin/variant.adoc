@@ -17,7 +17,8 @@ final y : Variant<Int32, Float64, String> = x # OK, accepts a narrower variant
 ```
 ====
 
-An actual variant instance option value may be extracted with either stem:[tt "@get"] or stem:[tt "@get?"] instrinsic invocation.
+A variant option of type stem:[tau] may be extracted with either `stem:[tt "@get"]<stem:[tau]>` or `stem:[tt "@get?"]<stem:[tau]>` instrinsic invocation.
+In contrary, the `stem:[tt "@neither"]<stem:[tau]>` intrinsic throws if it *does* currently hold stem:[tau].
 The <<_safety, safety>> of invoking an intrinsic depends on the instance <<_storage, storage>>: a local variant instance has threadsafe access, otherwise it's fragile.
 
 CAUTION: You can explicitly obtain a variant tag offset in bytes using the stem:[tt "@offsetof"] intrinsic.
@@ -26,54 +27,59 @@ CAUTION: You can explicitly obtain a variant tag offset in bytes using the stem:
 ====
 ```nx
 import rand from "std/rand"
-import { out } from "std/term"
 
 # TIP: The top-level scope is fragile.
 #
 
-final var = rand(42, "foo") : Variant<Int32, String>
+final v = rand(42, "foo") : Variant<Int32, String>
 
-final a = @get<Int32>(var) : Int32     # May throw `VariantError` if it's not `Int32`
-final b = @get?<String>(var) : String? # May return `nil` if it's not `String`
+final a = @get<Int32>(v) : Int32      # May throw `VariantError` if it's NOT `Int32`
+final b = @get?<String>(v) : String?  # May return `nil` if it's NOT `String`
+final c = @neither<Int32>(v) : String # May throw `VariantError` if it IS `Int32`
 
 # Unsafely get a `String` option.
-final c = unsafe! *((&var as void*)[@offsetof(var)] as String*)
+final d = unsafe! *((&v as void*)[@offsetof(v)] as String*)
 ```
 ====
 
-// A variant instance virtualized to an option type stem:[upsilon] allows direct access as if it was a stem:[upsilon] instance.
+If a result of a check whether a variant currently holds an option of type stem:[tau] is assigned to a local variable stem:[x] defined within a condition or a switcher, then the stem:[x] type is narrowed to stem:[tau].
+A truthy-ness check applied to a variable defined in a condition also narrows down its type.
 
-// A compiler shall automatically virtualize a non-final variant instance within a branch body (see <<_jump>>) if an option determination took place in a threadsafe environment, i.e. there are guarantees that the variant instance won't be altered by another thread.
-// A final variant instance is automatically virtualized in any safety environment.
+```onyx
+final v0 = rand(42, "foo", nil)
 
-// .Variant access safety
-// ====
-// ```nx
-// threadsafe! {
-//   let x = rand(42, "foo") # This is a local variable
+if (let v1 = v0) {
+  v0 : Variant<Int32, String, nil> # Intact
+  v1 : Variant<Int32, String>      # Narrowed down to non-nilable
+}
 
-//   if (@is?<Int32>(x)) {
-//     x += 1      # OK, because `x : Variant<Int32, String>~Int32`
-//     # x = "bar" # => Panic! Can not assign `String` to `x~Int32`
+if (let v2 = @get?<Int32>(v0)) {
+  v0 : Variant<Int32, String, nil> # Intact
+  v2 : Int32                       # Narrowed down
+}
 
-//     x~Variant = "bar" # OK, de-virtualize to `Variant<Int32, String>~Variant<Int32, String>`
+switch (let v3 = v0) {
+  case Int32 {
+    v0 : Variant<Int32, String, nil> # Intact
+    v3 : Int32                       # Narrowed down
+  } else {
+    v0 : Variant<Int32, String, nil> # Intact
+    v3 : String?                     # Narrowed down (still nilable)
+  }
+}
+```
 
-//     # x += 1     # => Panic! `x~Variant<Int32, String>.+(Int32)` is undeclared
-//     # x += "baz" # => Panic! Ditto
-//   } else {
-//     x += "baz" # OK, `x~String`
-//   }
-// }
-// ```
+Querying a variant at any scope transparently proxies the query to its actual option.
+Therefore, _all_ of the options must implement the access for the compilation to succeed.
 
-// ```nx
-// let x = rand(42, "foo") # A static non-final variable
+```onyx
+final v0 = rand([1, 2], "foo", nil)
 
-// threadsafe foo() {
-//   if (fragile! @is?<Int32>(x)) {
-//     fragile! x~Int32 += 1 # Virtualization would be fragile, and may even throw
-//     unsafe! x~Int32 += 1  # Unsafely virtualize if sure about multi-threaded access
-//   }
-// }
-// ```
-// ====
+# v0.size() # => Panic! `nil.size` is undefined
+
+if (let v1 = v0) {
+  v1.size() # OK (both `Int32[2].size` and `String.size` are defined)
+}
+
+@neither<nil>(v0).size() # OK, may throw
+```

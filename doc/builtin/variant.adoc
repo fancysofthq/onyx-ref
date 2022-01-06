@@ -18,7 +18,7 @@ final y : Variant<Int32, Float64, String> = x # OK, accepts a narrower variant
 ====
 
 A variant option of type stem:[tau] may be extracted with either `stem:[tt "@get"]<stem:[tau]>` or `stem:[tt "@get?"]<stem:[tau]>` instrinsic invocation.
-In contrary, the `stem:[tt "@neither"]<stem:[tau]>` intrinsic throws if it *does* currently hold stem:[tau].
+In contrary, the `stem:[tt "@neither"]<*stem:[tau]>` intrinsic throws if it *does* currently hold any type from stem:[tau].
 The <<_safety, safety>> of invoking an intrinsic depends on the instance <<_storage, storage>>: a local variant instance has threadsafe access, otherwise it's fragile.
 
 CAUTION: You can explicitly obtain a variant tag offset in bytes using the stem:[tt "@offsetof"] intrinsic.

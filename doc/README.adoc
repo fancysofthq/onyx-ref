@@ -6,8 +6,7 @@
 :sectlinks:
 :icons: font
 :xrefstyle: full
-Vlad Faust <vlad@fancysoft.xyz>
-v0.2.0, December 31, 2021
+2022 (C) Fancy Software <https://fancysoft.xyz>
 
 [preface]
 == Foreword
@@ -18,60 +17,67 @@ The Reference is meant for the Onyx programming language end-users, i.e. those w
 The Reference is technical, but it may use informal language and also contain explainations, rationale and repetitions where needed.
 
 The Reference is maintained by Fancy Software, the company behind the Fancy Onyx compiler.
-See the source code at https://github.com/fancysofthq/onyx-ref[GitHub].
+See the reference source code at https://github.com/fancysofthq/onyx-ref[GitHub].
 You can also reach https://twitter.com/fancysoft[@fancysoft] and https://twitter.com/vladfaust[@vladfaust] on Twitter for feedback.
 
 === The Onyx programming language
 
-_Onyx_ is a general purpose computer programming language inspired by C++ and Ruby.
+_Onyx_ is a general purpose computer programming language inspired by C++ and Crystal.
 
 Programs written in Onyx are designed to be executed on modern hardware.
 At the moment of writing, these are classic-processor computers running mainstream operating systems, such as Windows, OSX, Linux, iOS and Android.
-
 Onyx assumes presence of vital modern components such as MCU and FPU on a target machine.
-Once the technology evolves in order so that another component is considered vital (e.g. NPU or QPU), the language shall be updated to reflect the evolution.
+Once technology evolves in order to that another component is considered vital (e.g. https://en.wikichip.org/wiki/neural_processor[NPU], https://en.wikipedia.org/wiki/Qubit[QPU]), the language shall be updated to reflect the evolution.
 
-Still, Onyx is fit in most exotic environments, such as bare metal.
+Still, Onyx is fit in more exotic environments.
 The language features low-level functionality such as pointer arithmetic and easy C ABI interaction; these are often marked unsafe and require explicit transferring of responsibility from a compiler to the programmer themselves.
-Wrapping the low-level code into safer APIs allows to perform efficiently while staying on the higher level.
+Wrapping the low-level code into safer APIs allows to perform efficiently while staying on the higher level of mindset.
 
 ==== Design principles
 
-Onyx defines (but not enforces) the following design priniciples.
+Onyx defines the following design priniciples (essentially one).
 
-Inferring as much as possible::
-The language is tolerant to omitted modifiers, type restrictions and repretetions; these are often inferred unless ambigous or unclear from the context.
+Reuse as much as possible::
+Reusing concepts dramatically flattens the learning curve.
+The principle is applicable to all aspects of the language.
+For example, a runtime variable, a function argument, a class field and even a template argument all share the same declaration syntax.
+Interoperability is almost transparent; C types, C literals and even C macro definitions may be used as-is.
+However, sometimes evolution requires greater changes.
 
-Reusing concepts::
-Reusing concepts to be aware of dramatically flattens the learning curve.
-The principle is applicable to each aspect of the language.
+Be honestly friendly::
+A good friend wishes you the best and he _is_ being honest about that.
+Sometimes, a good design requires shift in mind; sometime, it's rough.
+Sometimes, explicitness is nessecary.
+Otherwise implicit, inferrable details may be omitted to improve the interface.
+That's the way technology evolves.
 
-Lesser implicitness::
-Fewer implicit conversions; fewer defaults.
-An entity should convey its intentions in its fullness, i.e. clear naming is preferable over short naming.
-
-Greater maintainability::
-TODO: `Int256` vs. `superlong`, virtual types etc.
+Embrace the ever-growing technology::
+Some think that `Int32` is more ambigous than stricter `SInt32`.
+Others prefer the punk-ish C approach and name the things without thinking about the eternity we all are having joy for here.
+64 bits isn't nearly enough to work with qubits _comfortably_, also https://en.wikipedia.org/wiki/Year_2038_problem[Y2038].
+What seemed unreachable before now is true.
+One moment in the future, there will be some `Intstem:[2^32]` notation to denote a binary integer with infinite-scalable radix.
+Until then, stay fast and practical.
 
 === Reference conventions
 
 Compiler::
 The Standard doesn't mandate whether Onyx is a statically- or dynamically-compiled language.
 It is designed to fit both scenarios.
-A binary application able to run programs written in Onyx is referenced to as a _compiler_ for brewity.
+An application able to run programs written in Onyx is referenced to as a _compiler_ for brewity.
 In shell code examples, `fnx` implies the Fancy Onyx compiler.
 
-A compile-time output (e.g. panics or macros) is denoted with `++=>++`, e.g. `# ++=>++ Panic! Undeclared variable`.
+Compile-time output (e.g. panic or macro output) is denoted with `++=>++`, e.g. `# ++=>++ Panic! Undeclared variable`.
 Runtime output is denoted with `++->++`, e.g. `# ++->++ Hello, world!`.
 
-=== Current state
+=== 🚧 Current state
 
 The Reference is WIP, its development is aligned to the https://github.com/fancysofthq/fnx[Fancy Onyx compiler].
 Most concepts are stabilized.
 Builtin and standard libraries aren't complete yet, though, their usage in examples is mostly for demonstration purposes.
 
-Currently, the Reference may be _too_ dry and technical, i.e. more of a specification rather than a user-friendly reference.
-This will change over time.
+Currently, the Reference may be too dry and technical, i.e. more of a specification rather than a user-friendly reference.
+You can improve that by creating a PR in https://github.com/fancysofthq/onyx-ref.
 
 include::./compilation.adoc[leveloffset=+1]
 include::./comments.adoc[leveloffset=+1]

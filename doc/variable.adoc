@@ -11,6 +11,8 @@ A final <<_record, record>> or <<_struct, struct>> variable is deemed a collecti
 A variable identifier shall match the following regular expression: `/[a-zA-Z_](a-zA-Z0-9_)*/`.
 Otherwise, it is wrapped in backticks; in that case, the identifer may contain any Unicode character except a backtick.
 
+TIP: Wrapping UTF-8 identifiers in backticks both for Onyx and C allowed to elegantly solve the problem of spaces in C identifiers, e.g. `` $++`++long int++`++* ``.
+
 A variable always has concrete type in runtime.
 It may be restricted to a type upon definition or access using the `stem:[var] : stem:[tau]` notation.
 Otherwise the type is inferred, if possible.

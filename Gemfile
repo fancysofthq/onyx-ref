@@ -1,2 +1,2 @@
 source 'https://rubygems.org'
-gem 'asciidoctor', '~> 2'
+gem 'asciidoctor', '~> 2.0'
